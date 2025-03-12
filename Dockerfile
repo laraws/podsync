@@ -10,7 +10,7 @@ COPY . .
 RUN make build
 
 # Download youtube-dl
-RUN wget -O /usr/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+RUN wget -O /usr/bin/yt-dlp  https://github.com/yt-dlp/yt-dlp-nightly-builds/releases/latest/download/yt-dlp && \
     chmod +x /usr/bin/yt-dlp
 
 FROM alpine:3.17
