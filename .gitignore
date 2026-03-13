@@ -37,3 +37,6 @@ db
 config.toml
 
 .claude/settings.local.json
+
+data/
+cookie.txt
