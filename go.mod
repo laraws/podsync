@@ -1,6 +1,6 @@
 module github.com/mxpv/podsync
 
-go 1.25
+go 1.25.0
 
 require (
 	github.com/BrianHicks/finch v0.0.0-20140409222414-419bd73c29ec
@@ -20,7 +20,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
 	github.com/zackradisic/soundcloud-api v0.1.8
-	golang.org/x/oauth2 v0.34.0
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.19.0
 	google.golang.org/api v0.258.0
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
