@@ -2,7 +2,7 @@ services:
   podsync:
     container_name: podsync
     build: .
-    image: podsync:local
+    image: laraws/podsync
     restart: always
     ports:
       - 8080:8080
