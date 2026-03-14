@@ -9,7 +9,7 @@ COPY . .
 
 RUN make build
 
-FROM ubuntu:24.04
+FROM node:trixie
 
 WORKDIR /app
 
