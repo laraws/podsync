@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/BrianHicks/finch v0.0.0-20140409222414-419bd73c29ec
-	github.com/aws/aws-sdk-go v1.44.144
+	github.com/aws/aws-sdk-go v1.55.8
 	github.com/dgraph-io/badger v1.6.2
 	github.com/eduncan911/podcast v1.4.2
 	github.com/gabriel-vasile/mimetype v1.4.12
