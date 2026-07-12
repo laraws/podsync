@@ -33,10 +33,17 @@ venv/
 /podsync
 podsync.log
 
-db
+# Database (SQLite local files)
+/db/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
 config.toml
 
 .claude/settings.local.json
+.codebuddy/
 
-data/
+/data/
 cookie.txt

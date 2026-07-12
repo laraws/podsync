@@ -9,7 +9,7 @@ import (
 type Version int
 
 const (
-	CurrentVersion = 1
+	CurrentVersion = 2
 )
 
 type Storage interface {
