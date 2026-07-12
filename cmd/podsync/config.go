@@ -81,6 +81,23 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+// LoadDatabaseConfig reads only the database section. It is used by init-db,
+// which should not require feeds, storage, downloader, or server settings.
+func LoadDatabaseConfig(path string) (*db.Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read config file: %s", path)
+	}
+	var config struct {
+		Database db.Config `toml:"database"`
+	}
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal toml")
+	}
+	applyDatabaseDefaults(&config.Database, path)
+	return &config.Database, nil
+}
+
 func (c *Config) validate() error {
 	var result *multierror.Error
 
@@ -164,16 +181,7 @@ func (c *Config) applyDefaults(configPath string) {
 		}
 	}
 
-	if c.Database.Type == "" {
-		c.Database.Type = "sqlite"
-	}
-
-	if c.Database.Type == "sqlite" && c.Database.DSN == "" {
-		if c.Database.Dir == "" {
-			c.Database.Dir = filepath.Join(filepath.Dir(configPath), "db")
-		}
-		c.Database.DSN = filepath.Join(c.Database.Dir, "podsync.db")
-	}
+	applyDatabaseDefaults(&c.Database, configPath)
 
 	for _, _feed := range c.Feeds {
 		if _feed.UpdatePeriod == 0 {
@@ -204,6 +212,18 @@ func (c *Config) applyDefaults(configPath string) {
 		if _feed.Clean == nil && c.Cleanup != nil {
 			_feed.Clean = c.Cleanup
 		}
+	}
+}
+
+func applyDatabaseDefaults(config *db.Config, configPath string) {
+	if config.Type == "" {
+		config.Type = "sqlite"
+	}
+	if config.Type == "sqlite" && config.DSN == "" {
+		if config.Dir == "" {
+			config.Dir = filepath.Join(filepath.Dir(configPath), "db")
+		}
+		config.DSN = filepath.Join(config.Dir, "podsync.db")
 	}
 }
 

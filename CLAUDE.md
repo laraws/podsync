@@ -62,9 +62,9 @@ goimports -w .      # Organize imports and format
 
 ### Database Migration
 ```bash
-./bin/migrate --config config.toml                 # Migrate using config file
-./bin/migrate --type sqlite --dsn /app/db/podsync.db  # Migrate SQLite directly
-./bin/migrate --type mysql --dsn "user:pass@tcp(127.0.0.1:3306)/podsync"  # Migrate MySQL
+./bin/podsync init-db --config config.toml                 # Initialize using config file
+./bin/podsync init-db --type sqlite --dsn /app/db/podsync.db  # Initialize SQLite directly
+./bin/podsync init-db --type mysql --dsn "user:pass@tcp(127.0.0.1:3306)/podsync"  # Initialize MySQL
 ```
 
 ### Docker

@@ -152,6 +152,16 @@ data_dir = "/data"
 	assert.EqualValues(t, feed.Format, "video")
 }
 
+func TestLoadDatabaseConfigDoesNotRequireApplicationConfig(t *testing.T) {
+	path := setup(t, "[database]\ntype = \"sqlite\"\ndir = \"/tmp/podsync-test\"\n")
+	defer os.Remove(path)
+
+	config, err := LoadDatabaseConfig(path)
+	require.NoError(t, err)
+	assert.Equal(t, "sqlite", config.Type)
+	assert.Equal(t, "/tmp/podsync-test/podsync.db", config.DSN)
+}
+
 func TestHttpServerListenAddress(t *testing.T) {
 	const file = `
 [server]

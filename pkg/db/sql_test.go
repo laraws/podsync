@@ -26,9 +26,6 @@ func TestSQLStorage(t *testing.T) {
 	feed := testFeed()
 
 	require.NoError(t, database.AddFeed(ctx, feed.ID, feed))
-	version, err := database.Version()
-	require.NoError(t, err)
-	assert.Equal(t, CurrentVersion, version)
 
 	actual, err := database.GetFeed(ctx, feed.ID)
 	require.NoError(t, err)
@@ -64,9 +61,30 @@ func TestSQLStorage(t *testing.T) {
 	assert.ErrorIs(t, err, model.ErrNotFound)
 }
 
+func TestNewInitializesSimplifiedSchema(t *testing.T) {
+	database := newTestSQL(t)
+
+	assert.True(t, database.db.Migrator().HasTable("feeds"))
+	assert.True(t, database.db.Migrator().HasTable("episodes"))
+	assert.False(t, database.db.Migrator().HasTable("feed_metadata"))
+	assert.False(t, database.db.Migrator().HasTable("feed_settings"))
+	assert.False(t, database.db.Migrator().HasTable("episode_states"))
+	assert.False(t, database.db.Migrator().HasTable("schema_migrations"))
+
+	var foreignKeys []struct{ Table string }
+	require.NoError(t, database.db.Raw("PRAGMA foreign_key_list(episodes)").Scan(&foreignKeys).Error)
+	assert.Empty(t, foreignKeys)
+}
+
 func TestNewRejectsUnsupportedDriver(t *testing.T) {
 	_, err := New(&Config{Type: "postgres", DSN: "ignored"})
 	assert.EqualError(t, err, `unsupported database type "postgres" (expected sqlite or mysql)`)
+}
+
+func TestMySQLDSNEnablesTimeParsing(t *testing.T) {
+	dsn, err := mysqlDSN("user:password@tcp(localhost:3306)/podsync?charset=utf8mb4")
+	require.NoError(t, err)
+	assert.Contains(t, dsn, "parseTime=true")
 }
 
 func testFeed() *model.Feed {

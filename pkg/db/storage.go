@@ -6,15 +6,8 @@ import (
 	"github.com/mxpv/podsync/pkg/model"
 )
 
-type Version int
-
-const (
-	CurrentVersion = 2
-)
-
 type Storage interface {
 	Close() error
-	Version() (int, error)
 
 	// AddFeed will:
 	// - Insert or update feed info
