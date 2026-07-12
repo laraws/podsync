@@ -11,8 +11,27 @@ services:
       - ./db:/app/db/
       - ./config.toml:/app/config.toml
       - ./cookie.txt:/app/cookie.txt
+    # Database configuration is set in config.toml under [database].
+    # SQLite (default) stores data in /app/db/podsync.db (mapped to ./db).
+    # To use MySQL, set [database] type = "mysql" in config.toml and
+    # uncomment the mysql service below.
     # environment:
     #   - PODSYNC_YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
     #   - PODSYNC_VIMEO_API_KEY=${VIMEO_API_KEY}
     #   - PODSYNC_SOUNDCLOUD_API_KEY=${SOUNDCLOUD_API_KEY}
     #   - PODSYNC_TWITCH_API_KEY=${TWITCH_API_KEY}
+
+  # Optional MySQL service for database storage.
+  # mysql:
+  #   image: mysql:8
+  #   container_name: podsync-mysql
+  #   restart: always
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: rootpass
+  #     MYSQL_DATABASE: podsync
+  #     MYSQL_USER: podsync
+  #     MYSQL_PASSWORD: podsyncpass
+  #   volumes:
+  #     - ./mysql-data:/var/lib/mysql
+  #   ports:
+  #     - 3306:3306

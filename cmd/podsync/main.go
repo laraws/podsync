@@ -112,7 +112,7 @@ func main() {
 		log.WithError(err).Fatal("youtube-dl error")
 	}
 
-	database, err := db.NewBadger(&cfg.Database)
+	database, err := db.New(&cfg.Database)
 	if err != nil {
 		log.WithError(err).Fatal("failed to open database")
 	}

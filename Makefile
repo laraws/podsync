@@ -30,6 +30,13 @@ build:
 	go build -trimpath -tags netgo -ldflags ${LDFLAGS} -o bin/podsync ./cmd/podsync
 
 #
+# Build the database migration CLI
+#
+.PHONY: migrate
+migrate:
+	go build -trimpath -ldflags ${LDFLAGS} -o bin/migrate ./cmd/migrate
+
+#./bi	
 # Build a local Docker image
 # Example:
 # 	$ make docker

@@ -15,7 +15,7 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 ### Core Packages (`pkg/`)
 - **builder/**: Media downloaders for different platforms (YouTube, Vimeo, SoundCloud)
 - **feed/**: RSS/podcast feed generation and management, OPML export
-- **db/**: BadgerDB-based storage for metadata and state
+- **db/**: GORM-based SQL storage (SQLite/MySQL) for metadata and state
 - **fs/**: Storage abstraction supporting local filesystem and S3-compatible storage
 - **model/**: Core data structures and domain models
 - **ytdl/**: YouTube-dl wrapper for media downloading
@@ -26,7 +26,7 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 
 ### Key Dependencies
 - youtube-dl/yt-dlp for media downloading
-- BadgerDB for local storage
+- GORM with SQLite/MySQL for database storage
 - go-toml for configuration
 - robfig/cron for scheduling
 - AWS SDK for S3 storage
@@ -60,6 +60,13 @@ goimports -w .      # Organize imports and format
 ./bin/podsync --headless              # Run once and exit (no web server)
 ```
 
+### Database Migration
+```bash
+./bin/migrate --config config.toml                 # Migrate using config file
+./bin/migrate --type sqlite --dsn /app/db/podsync.db  # Migrate SQLite directly
+./bin/migrate --type mysql --dsn "user:pass@tcp(127.0.0.1:3306)/podsync"  # Migrate MySQL
+```
+
 ### Docker
 ```bash
 make docker                           # Build local Docker image
@@ -74,6 +81,7 @@ Use VS Code with the Go extension. The repository includes `.vscode/launch.json`
 The application uses TOML configuration files. See `config.toml.example` for all available options. Key sections:
 - `[server]`: Web server settings (port, hostname, TLS)
 - `[storage]`: Local or S3 storage configuration  
+- `[database]`: Database configuration (SQLite or MySQL via GORM)
 - `[tokens]`: API keys for YouTube/Vimeo
 - `[feeds]`: Feed definitions with URLs and settings
 - `[downloader]`: youtube-dl configuration

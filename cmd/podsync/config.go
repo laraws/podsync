@@ -121,6 +121,15 @@ func (c *Config) validate() error {
 		result = multierror.Append(result, errors.New("at least one feed must be specified"))
 	}
 
+	switch c.Database.Type {
+	case "sqlite", "mysql":
+		if c.Database.DSN == "" {
+			result = multierror.Append(result, errors.Errorf("database DSN is required for %q", c.Database.Type))
+		}
+	default:
+		result = multierror.Append(result, errors.Errorf("unknown database type: %s (expected sqlite or mysql)", c.Database.Type))
+	}
+
 	for id, f := range c.Feeds {
 		if f.URL == "" {
 			result = multierror.Append(result, errors.Errorf("URL is required for %q", id))
@@ -155,8 +164,15 @@ func (c *Config) applyDefaults(configPath string) {
 		}
 	}
 
-	if c.Database.Dir == "" {
-		c.Database.Dir = filepath.Join(filepath.Dir(configPath), "db")
+	if c.Database.Type == "" {
+		c.Database.Type = "sqlite"
+	}
+
+	if c.Database.Type == "sqlite" && c.Database.DSN == "" {
+		if c.Database.Dir == "" {
+			c.Database.Dir = filepath.Join(filepath.Dir(configPath), "db")
+		}
+		c.Database.DSN = filepath.Join(c.Database.Dir, "podsync.db")
 	}
 
 	for _, _feed := range c.Feeds {
