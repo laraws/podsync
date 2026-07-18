@@ -25,6 +25,7 @@ RUN apt-get update && \
         ffmpeg \
         tzdata \
         curl \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
 
 
