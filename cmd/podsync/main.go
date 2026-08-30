@@ -54,6 +54,12 @@ func main() {
 		TimestampFormat: time.RFC3339,
 		FullTimestamp:   true,
 	})
+	if len(os.Args) > 1 && os.Args[1] == "init-db" {
+		if err := runInitDB(os.Args[2:]); err != nil {
+			log.WithError(err).Fatal("failed to initialize database")
+		}
+		return
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -112,7 +118,7 @@ func main() {
 		log.WithError(err).Fatal("youtube-dl error")
 	}
 
-	database, err := db.NewBadger(&cfg.Database)
+	database, err := db.New(&cfg.Database)
 	if err != nil {
 		log.WithError(err).Fatal("failed to open database")
 	}

@@ -99,8 +99,6 @@ timeout = 15
 
 	assert.EqualValues(t, feed.Custom.Subcategories, []string{"1", "2"})
 
-	assert.Nil(t, config.Database.Badger)
-
 	assert.True(t, config.Downloader.SelfUpdate)
 	assert.EqualValues(t, 15, config.Downloader.Timeout)
 }
@@ -154,6 +152,16 @@ data_dir = "/data"
 	assert.EqualValues(t, feed.Format, "video")
 }
 
+func TestLoadDatabaseConfigDoesNotRequireApplicationConfig(t *testing.T) {
+	path := setup(t, "[database]\ntype = \"sqlite\"\ndir = \"/tmp/podsync-test\"\n")
+	defer os.Remove(path)
+
+	config, err := LoadDatabaseConfig(path)
+	require.NoError(t, err)
+	assert.Equal(t, "sqlite", config.Type)
+	assert.Equal(t, "/tmp/podsync-test/podsync.db", config.DSN)
+}
+
 func TestHttpServerListenAddress(t *testing.T) {
 	const file = `
 [server]
@@ -167,7 +175,8 @@ data_dir = "/data"
   url = "https://youtube.com/watch?v=ygIUF678y40"
 
 [database]
-  badger = { truncate = true, file_io = true }
+  type = "sqlite"
+  dsn = "/data/podsync.db"
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -208,9 +217,11 @@ func TestDefaultDatabasePath(t *testing.T) {
 	cfg := Config{}
 	cfg.applyDefaults("/home/user/podsync/config.toml")
 	assert.Equal(t, "/home/user/podsync/db", cfg.Database.Dir)
+	assert.Equal(t, "sqlite", cfg.Database.Type)
+	assert.Equal(t, "/home/user/podsync/db/podsync.db", cfg.Database.DSN)
 }
 
-func TestLoadBadgerConfig(t *testing.T) {
+func TestLoadSQLConfig(t *testing.T) {
 	const file = `
 [server]
 data_dir = "/data"
@@ -220,7 +231,10 @@ data_dir = "/data"
   url = "https://youtube.com/watch?v=ygIUF678y40"
 
 [database]
-  badger = { truncate = true, file_io = true }
+  type = "mysql"
+  dsn = "user:pass@tcp(127.0.0.1:3306)/podsync?charset=utf8mb4&parseTime=True"
+  max_open_conns = 10
+  max_idle_conns = 5
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -228,10 +242,11 @@ data_dir = "/data"
 	config, err := LoadConfig(path)
 	assert.NoError(t, err)
 	require.NotNil(t, config)
-	require.NotNil(t, config.Database.Badger)
 
-	assert.True(t, config.Database.Badger.Truncate)
-	assert.True(t, config.Database.Badger.FileIO)
+	assert.Equal(t, "mysql", config.Database.Type)
+	assert.Equal(t, "user:pass@tcp(127.0.0.1:3306)/podsync?charset=utf8mb4&parseTime=True", config.Database.DSN)
+	assert.EqualValues(t, 10, config.Database.MaxOpenConns)
+	assert.EqualValues(t, 5, config.Database.MaxIdleConns)
 }
 
 func TestGlobalCleanupPolicy(t *testing.T) {

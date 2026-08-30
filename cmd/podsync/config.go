@@ -81,6 +81,23 @@ func LoadConfig(path string) (*Config, error) {
 	return &config, nil
 }
 
+// LoadDatabaseConfig reads only the database section. It is used by init-db,
+// which should not require feeds, storage, downloader, or server settings.
+func LoadDatabaseConfig(path string) (*db.Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to read config file: %s", path)
+	}
+	var config struct {
+		Database db.Config `toml:"database"`
+	}
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal toml")
+	}
+	applyDatabaseDefaults(&config.Database, path)
+	return &config.Database, nil
+}
+
 func (c *Config) validate() error {
 	var result *multierror.Error
 
@@ -121,6 +138,15 @@ func (c *Config) validate() error {
 		result = multierror.Append(result, errors.New("at least one feed must be specified"))
 	}
 
+	switch c.Database.Type {
+	case "sqlite", "mysql":
+		if c.Database.DSN == "" {
+			result = multierror.Append(result, errors.Errorf("database DSN is required for %q", c.Database.Type))
+		}
+	default:
+		result = multierror.Append(result, errors.Errorf("unknown database type: %s (expected sqlite or mysql)", c.Database.Type))
+	}
+
 	for id, f := range c.Feeds {
 		if f.URL == "" {
 			result = multierror.Append(result, errors.Errorf("URL is required for %q", id))
@@ -155,9 +181,7 @@ func (c *Config) applyDefaults(configPath string) {
 		}
 	}
 
-	if c.Database.Dir == "" {
-		c.Database.Dir = filepath.Join(filepath.Dir(configPath), "db")
-	}
+	applyDatabaseDefaults(&c.Database, configPath)
 
 	for _, _feed := range c.Feeds {
 		if _feed.UpdatePeriod == 0 {
@@ -188,6 +212,18 @@ func (c *Config) applyDefaults(configPath string) {
 		if _feed.Clean == nil && c.Cleanup != nil {
 			_feed.Clean = c.Cleanup
 		}
+	}
+}
+
+func applyDatabaseDefaults(config *db.Config, configPath string) {
+	if config.Type == "" {
+		config.Type = "sqlite"
+	}
+	if config.Type == "sqlite" && config.DSN == "" {
+		if config.Dir == "" {
+			config.Dir = filepath.Join(filepath.Dir(configPath), "db")
+		}
+		config.DSN = filepath.Join(config.Dir, "podsync.db")
 	}
 }
 
