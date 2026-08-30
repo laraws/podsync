@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     episode_order TEXT NOT NULL DEFAULT '',
     status        TEXT NOT NULL DEFAULT '',
     size          INTEGER NOT NULL DEFAULT 0,
+    object_key    TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (feed_id, id)
 );
 

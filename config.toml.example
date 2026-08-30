@@ -29,7 +29,7 @@ debug_endpoints = false
 
 # Configure where to store the episode data
 [storage]
-  # Could be "local" (default) for the local file system, or "s3" for a S3-compatible storage provider (e.g. AWS S3)
+  # Could be "local" (default), "s3", or "r2" for Cloudflare R2.
   type = "local"
 
   [storage.local]
@@ -44,6 +44,18 @@ debug_endpoints = false
   # If you use prefix, you may need to add a path to `server.hostname` setting
   # e.g. https://example-bucket-name.s3.us-west-2.amazonaws.com/example/prefix/
   prefix = "example/prefix"
+
+  # Cloudflare R2 uses its S3-compatible API. Prefer the environment variables
+  # PODSYNC_R2_ACCESS_KEY_ID and PODSYNC_R2_SECRET_ACCESS_KEY in deployments.
+  # public_url must be an enabled R2 custom domain or r2.dev URL; the S3 API
+  # endpoint is authenticated and cannot be used as a podcast enclosure URL.
+  [storage.r2]
+  endpoint_url = "https://ACCOUNT_ID.r2.cloudflarestorage.com"
+  bucket = "example-bucket-name"
+  public_url = "https://media.example.com"
+  prefix = ""
+  # access_key_id = "..."
+  # secret_access_key = "..."
 
 # API keys to be used to access Youtube and Vimeo.
 # These can be either specified as string parameter or array of string (so those will be rotated).

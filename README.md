@@ -104,6 +104,23 @@ hostname = "https://my.test.host:4443"
 
 Server will be accessible from `http://localhost:8080`, but episode links will point to `https://my.test.host:4443/ID1/...`
 
+### Cloudflare R2 storage
+
+R2 stores episodes, generated RSS XML, and OPML outside the local data directory. `public_url` must be an enabled R2 custom domain (recommended) or `r2.dev` URL; it is intentionally separate from the authenticated S3 API endpoint.
+
+```toml
+[storage]
+type = "r2"
+
+  [storage.r2]
+  endpoint_url = "https://ACCOUNT_ID.r2.cloudflarestorage.com"
+  bucket = "podcasts"
+  public_url = "https://media.example.com"
+  prefix = ""
+```
+
+Set the credentials with `PODSYNC_R2_ACCESS_KEY_ID` and `PODSYNC_R2_SECRET_ACCESS_KEY`. Downloaded episode rows persist only the object key; RSS enclosure URLs are assembled from `public_url` at generation time.
+
 ### 🌍 Environment Variables
 
 Podsync supports the following environment variables for configuration and API keys:
@@ -115,6 +132,11 @@ Podsync supports the following environment variables for configuration and API k
 | `PODSYNC_VIMEO_API_KEY`      | Vimeo API key(s), space-separated for rotation                                            | `key1` or `key1 key2`        |
 | `PODSYNC_SOUNDCLOUD_API_KEY` | SoundCloud API key(s), space-separated for rotation                                       | `soundcloud_key1 soundcloud_key2`             |
 | `PODSYNC_TWITCH_API_KEY`     | Twitch API credentials in the format `CLIENT_ID:CLIENT_SECRET`, space-separated for multi | `id1:secret1 id2:secret2`                     |
+| `PODSYNC_R2_ENDPOINT_URL`     | Cloudflare R2 S3 API endpoint                                                          | `https://ACCOUNT_ID.r2.cloudflarestorage.com` |
+| `PODSYNC_R2_ACCESS_KEY_ID`    | R2 S3 access key ID                                                                   | `...`                                         |
+| `PODSYNC_R2_SECRET_ACCESS_KEY`| R2 S3 secret access key                                                               | `...`                                         |
+| `PODSYNC_R2_BUCKET`           | R2 bucket name                                                                        | `podcasts`                                    |
+| `PODSYNC_R2_PUBLIC_URL`       | Enabled R2 public custom domain or development URL                                     | `https://media.example.com`                   |
 
 ## 🚀 How to run
 

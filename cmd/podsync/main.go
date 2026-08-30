@@ -129,11 +129,18 @@ func main() {
 	}()
 
 	var storage fs.Storage
+	publicURL := cfg.Server.Hostname
 	switch cfg.Storage.Type {
 	case "local":
 		storage, err = fs.NewLocal(cfg.Storage.Local.DataDir, cfg.Server.WebUIEnabled)
 	case "s3":
 		storage, err = fs.NewS3(cfg.Storage.S3) // serving files from S3 is not supported, so no WebUI either
+		if cfg.Storage.S3.PublicURL != "" {
+			publicURL = cfg.Storage.S3.PublicURL
+		}
+	case "r2":
+		storage, err = fs.NewR2(cfg.Storage.R2)
+		publicURL = cfg.Storage.R2.PublicURL
 	default:
 		log.Fatalf("unknown storage type: %s", cfg.Storage.Type)
 	}
@@ -153,7 +160,7 @@ func main() {
 	}
 
 	log.Debug("creating update manager")
-	manager, err := update.NewUpdater(cfg.Feeds, keys, cfg.Server.Hostname, downloader, database, storage)
+	manager, err := update.NewUpdater(cfg.Feeds, keys, publicURL, downloader, database, storage)
 	if err != nil {
 		log.WithError(err).Fatal("failed to create updater")
 	}
@@ -241,43 +248,35 @@ func main() {
 		}
 	})
 
-	if cfg.Storage.Type == "s3" {
-		return // S3 content is hosted externally
+	if cfg.Storage.Type == "local" {
+		// Local files are served by Podsync. S3/R2 files and feeds are hosted externally.
+		srv := web.New(cfg.Server, storage, database)
+		group.Go(func() error {
+			log.Infof("running listener at %s", srv.Addr)
+			if cfg.Server.TLS {
+				return srv.ListenAndServeTLS(cfg.Server.CertificatePath, cfg.Server.KeyFilePath)
+			}
+			return srv.ListenAndServe()
+		})
+		group.Go(func() error {
+			<-ctx.Done()
+			ctxShutDown, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			log.Info("shutting down web server")
+			return srv.Shutdown(ctxShutDown)
+		})
+	} else {
+		log.Infof("%s content is hosted externally at %s", cfg.Storage.Type, publicURL)
 	}
 
-	// Run web server
-	srv := web.New(cfg.Server, storage, database)
-
+	// Keep both local and external-storage modes running until they are stopped.
 	group.Go(func() error {
-		log.Infof("running listener at %s", srv.Addr)
-		if cfg.Server.TLS {
-			return srv.ListenAndServeTLS(cfg.Server.CertificatePath, cfg.Server.KeyFilePath)
-		} else {
-			return srv.ListenAndServe()
-		}
-	})
-
-	group.Go(func() error {
-		// Shutdown web server
-		defer func() {
-			ctxShutDown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer func() {
-				cancel()
-			}()
-			log.Info("shutting down web server")
-			if err := srv.Shutdown(ctxShutDown); err != nil {
-				log.WithError(err).Error("server shutdown failed")
-			}
-		}()
-
-		for {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-stop:
-				cancel()
-				return nil
-			}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-stop:
+			cancel()
+			return nil
 		}
 	})
 }

@@ -46,3 +46,17 @@ func TestBuildXML(t *testing.T) {
 	assert.EqualValues(t, out.Items[0].Enclosure.URL, "http://localhost/test/1.mp4")
 	assert.EqualValues(t, out.Items[0].Enclosure.Type, itunes.MP4)
 }
+
+func TestBuildXMLUsesPersistedObjectKey(t *testing.T) {
+	f := model.Feed{Episodes: []*model.Episode{{
+		ID: "1", Status: model.EpisodeDownloaded, Title: "title",
+		Description: "description", ObjectKey: "podcasts/test/renamed.mp3",
+	}}}
+	cfg := Config{ID: "test", Format: model.FormatAudio}
+
+	out, err := Build(context.Background(), &f, &cfg, "https://media.example.com/")
+	require.NoError(t, err)
+	require.Len(t, out.Items, 1)
+	require.NotNil(t, out.Items[0].Enclosure)
+	assert.Equal(t, "https://media.example.com/podcasts/test/renamed.mp3", out.Items[0].Enclosure.URL)
+}

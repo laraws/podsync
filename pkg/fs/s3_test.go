@@ -2,123 +2,90 @@ package fs
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"os"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/client/metadata"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestS3_Create(t *testing.T) {
 	files := make(map[string][]byte)
-	stor, err := newMockS3(files, "")
-	assert.NoError(t, err)
+	stor := newMockS3(files, "")
 
 	written, err := stor.Create(testCtx, "1/test", bytes.NewBuffer([]byte{1, 5, 7, 8, 3}))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.EqualValues(t, 5, written)
-
-	d, ok := files["1/test"]
-	assert.True(t, ok)
-	assert.EqualValues(t, 5, len(d))
+	assert.Equal(t, []byte{1, 5, 7, 8, 3}, files["1/test"])
 }
 
 func TestS3_Size(t *testing.T) {
-	files := make(map[string][]byte)
-	stor, err := newMockS3(files, "")
-	assert.NoError(t, err)
-
-	_, err = stor.Create(testCtx, "1/test", bytes.NewBuffer([]byte{1, 5, 7, 8, 3}))
-	assert.NoError(t, err)
-
+	stor := newMockS3(map[string][]byte{"1/test": {1, 5, 7, 8, 3}}, "")
 	sz, err := stor.Size(testCtx, "1/test")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.EqualValues(t, 5, sz)
 }
 
 func TestS3_NoSize(t *testing.T) {
-	files := make(map[string][]byte)
-	stor, err := newMockS3(files, "")
-	assert.NoError(t, err)
-
-	_, err = stor.Size(testCtx, "1/test")
+	stor := newMockS3(map[string][]byte{}, "")
+	_, err := stor.Size(testCtx, "1/test")
 	assert.True(t, os.IsNotExist(err))
 }
 
 func TestS3_Delete(t *testing.T) {
-	files := make(map[string][]byte)
-	stor, err := newMockS3(files, "")
-	assert.NoError(t, err)
+	files := map[string][]byte{"1/test": {1, 5, 7, 8, 3}}
+	stor := newMockS3(files, "")
 
-	_, err = stor.Create(testCtx, "1/test", bytes.NewBuffer([]byte{1, 5, 7, 8, 3}))
-	assert.NoError(t, err)
-
-	err = stor.Delete(testCtx, "1/test")
-	assert.NoError(t, err)
-
-	_, err = stor.Size(testCtx, "1/test")
-	assert.True(t, errors.Is(err, os.ErrNotExist))
-
+	require.NoError(t, stor.Delete(testCtx, "1/test"))
 	_, ok := files["1/test"]
 	assert.False(t, ok)
-
-	err = stor.Delete(testCtx, "1/test")
+	_, err := stor.Size(testCtx, "1/test")
 	assert.True(t, errors.Is(err, os.ErrNotExist))
 }
 
-func TestS3_BuildKey(t *testing.T) {
-	files := make(map[string][]byte)
-
-	stor, _ := newMockS3(files, "")
-	key := stor.buildKey("test-fn")
-	assert.EqualValues(t, "test-fn", key)
-
-	stor, _ = newMockS3(files, "mock-prefix")
-	key = stor.buildKey("test-fn")
-	assert.EqualValues(t, "mock-prefix/test-fn", key)
+func TestS3_ObjectKey(t *testing.T) {
+	assert.Equal(t, "test-fn", newMockS3(nil, "").ObjectKey("test-fn"))
+	assert.Equal(t, "mock-prefix/test-fn", newMockS3(nil, "mock-prefix").ObjectKey("/test-fn"))
 }
 
-type mockS3API struct {
-	s3iface.S3API
+type mockS3 struct {
 	files map[string][]byte
 }
 
-func newMockS3(files map[string][]byte, prefix string) (*S3, error) {
-	api := &mockS3API{files: files}
-	return &S3{
-		api:      api,
-		uploader: s3manager.NewUploaderWithClient(api),
-		bucket:   "mock-bucket",
-		prefix:   prefix,
-	}, nil
+func newMockS3(files map[string][]byte, prefix string) *S3 {
+	api := &mockS3{files: files}
+	return &S3{api: api, uploader: api, bucket: "mock-bucket", prefix: prefix}
 }
 
-func (m *mockS3API) PutObjectRequest(input *s3.PutObjectInput) (*request.Request, *s3.PutObjectOutput) {
-	content, _ := io.ReadAll(input.Body)
-	req := request.New(aws.Config{}, metadata.ClientInfo{}, request.Handlers{}, nil, &request.Operation{}, nil, nil)
-	m.files[*input.Key] = content
-	return req, &s3.PutObjectOutput{}
-}
-
-func (m *mockS3API) HeadObjectWithContext(ctx aws.Context, input *s3.HeadObjectInput, opts ...request.Option) (*s3.HeadObjectOutput, error) {
-	if _, ok := m.files[*input.Key]; ok {
-		return &s3.HeadObjectOutput{ContentLength: aws.Int64(int64(len(m.files[*input.Key])))}, nil
+func (m *mockS3) UploadObject(_ context.Context, input *transfermanager.UploadObjectInput, _ ...func(*transfermanager.Options)) (*transfermanager.UploadObjectOutput, error) {
+	content, err := io.ReadAll(input.Body)
+	if err != nil {
+		return nil, err
 	}
-	return nil, awserr.New("NotFound", "", nil)
+	m.files[aws.ToString(input.Key)] = content
+	return &transfermanager.UploadObjectOutput{}, nil
 }
 
-func (m *mockS3API) DeleteObjectWithContext(ctx aws.Context, input *s3.DeleteObjectInput, opts ...request.Option) (*s3.DeleteObjectOutput, error) {
-	if _, ok := m.files[*input.Key]; ok {
-		delete(m.files, *input.Key)
-		return &s3.DeleteObjectOutput{}, nil
+func (m *mockS3) HeadObject(_ context.Context, input *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	content, ok := m.files[aws.ToString(input.Key)]
+	if !ok {
+		return nil, &smithy.GenericAPIError{Code: "NotFound", Message: "not found"}
 	}
-	return nil, awserr.New("NotFound", "", nil)
+	return &s3.HeadObjectOutput{ContentLength: aws.Int64(int64(len(content)))}, nil
+}
+
+func (m *mockS3) DeleteObject(_ context.Context, input *s3.DeleteObjectInput, _ ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+	key := aws.ToString(input.Key)
+	if _, ok := m.files[key]; !ok {
+		return nil, &smithy.GenericAPIError{Code: "NotFound", Message: "not found"}
+	}
+	delete(m.files, key)
+	return &s3.DeleteObjectOutput{}, nil
 }

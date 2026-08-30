@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     episode_order VARCHAR(50) NOT NULL DEFAULT '',
     status        VARCHAR(50) NOT NULL DEFAULT '',
     size          BIGINT NOT NULL DEFAULT 0,
+    object_key    VARCHAR(1024) NOT NULL DEFAULT '',
     PRIMARY KEY (feed_id, id),
     INDEX idx_episodes_feed_id (feed_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -249,6 +249,34 @@ data_dir = "/data"
 	assert.EqualValues(t, 5, config.Database.MaxIdleConns)
 }
 
+func TestLoadR2Config(t *testing.T) {
+	const file = `
+[server]
+hostname = "http://localhost:8080"
+
+[storage]
+type = "r2"
+  [storage.r2]
+  endpoint_url = "https://account.r2.cloudflarestorage.com"
+  bucket = "podcasts"
+  public_url = "https://media.example.com"
+  access_key_id = "access"
+  secret_access_key = "secret"
+
+[feeds]
+  [feeds.A]
+  url = "https://youtube.com/watch?v=ygIUF678y40"
+`
+	path := setup(t, file)
+	defer os.Remove(path)
+
+	config, err := LoadConfig(path)
+	require.NoError(t, err)
+	assert.Equal(t, "r2", config.Storage.Type)
+	assert.Equal(t, "podcasts", config.Storage.R2.Bucket)
+	assert.Equal(t, "https://media.example.com", config.Storage.R2.PublicURL)
+}
+
 func TestGlobalCleanupPolicy(t *testing.T) {
 	t.Run("global cleanup policy applied to feeds without cleanup", func(t *testing.T) {
 		const file = `

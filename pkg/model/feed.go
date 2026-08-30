@@ -40,7 +40,8 @@ type Episode struct {
 	PubDate     time.Time     `json:"pub_date"`
 	Size        int64         `json:"size"`
 	Order       string        `json:"order"`
-	Status      EpisodeStatus `json:"status"` // Disk status
+	Status      EpisodeStatus `json:"status"`     // Disk status
+	ObjectKey   string        `json:"object_key"` // Stable key in the configured object storage
 }
 
 type Feed struct {

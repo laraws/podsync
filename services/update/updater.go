@@ -29,7 +29,7 @@ type Downloader interface {
 type TokenList []string
 
 type Manager struct {
-	hostname   string
+	publicURL  string
 	downloader Downloader
 	db         db.Storage
 	fs         fs.Storage
@@ -40,13 +40,13 @@ type Manager struct {
 func NewUpdater(
 	feeds map[string]*feed.Config,
 	keys map[model.Provider]feed.KeyProvider,
-	hostname string,
+	publicURL string,
 	downloader Downloader,
 	db db.Storage,
 	fs fs.Storage,
 ) (*Manager, error) {
 	return &Manager{
-		hostname:   hostname,
+		publicURL:  publicURL,
 		downloader: downloader,
 		db:         db,
 		fs:         fs,
@@ -167,9 +167,42 @@ func (u *Manager) fetchEpisodes(ctx context.Context, feedConfig *feed.Config) ([
 		var (
 			logger = log.WithFields(log.Fields{"episode_id": episode.ID})
 		)
+		if episode.Status == model.EpisodeDownloaded {
+			objectKey := u.episodeObjectKey(feedConfig, episode)
+			size, err := u.fs.Size(ctx, objectKey)
+			if err == nil {
+				logger.Infof("skipping due to already downloaded")
+				// Persist keys for rows created before object storage support.
+				if episode.ObjectKey == "" {
+					if err := u.db.UpdateEpisode(feedID, episode.ID, func(stored *model.Episode) error {
+						stored.ObjectKey = objectKey
+						stored.Size = size
+						return nil
+					}); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			if !os.IsNotExist(err) {
+				return errors.Wrap(err, "failed to check downloaded object")
+			}
+
+			// A backend switch can leave a downloaded database row pointing at an
+			// object that is absent from the active storage. Queue it again instead
+			// of publishing a broken enclosure URL.
+			logger.Warnf("downloaded object %q is missing; queueing it again", objectKey)
+			if err := u.db.UpdateEpisode(feedID, episode.ID, func(stored *model.Episode) error {
+				stored.Status = model.EpisodeNew
+				stored.ObjectKey = objectKey
+				return nil
+			}); err != nil {
+				return err
+			}
+			episode.Status = model.EpisodeNew
+			episode.ObjectKey = objectKey
+		}
 		if episode.Status != model.EpisodeNew && episode.Status != model.EpisodeError {
-			// File already downloaded
-			logger.Infof("skipping due to already downloaded")
 			return nil
 		}
 
@@ -213,12 +246,12 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config,
 
 	for idx, episode := range downloadList {
 		var (
-			logger      = log.WithFields(log.Fields{"index": idx, "episode_id": episode.ID})
-			episodeName = feed.EpisodeName(feedConfig, episode)
+			logger    = log.WithFields(log.Fields{"index": idx, "episode_id": episode.ID})
+			objectKey = u.episodeObjectKey(feedConfig, episode)
 		)
 
 		// Check whether episode already exists
-		size, err := u.fs.Size(ctx, fmt.Sprintf("%s/%s", feedID, episodeName))
+		size, err := u.fs.Size(ctx, objectKey)
 		if err == nil {
 			logger.Infof("episode %q already exists on disk", episode.ID)
 
@@ -226,6 +259,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config,
 			if err := u.db.UpdateEpisode(feedID, episode.ID, func(episode *model.Episode) error {
 				episode.Size = size
 				episode.Status = model.EpisodeDownloaded
+				episode.ObjectKey = objectKey
 				return nil
 			}); err != nil {
 				logger.WithError(err).Error("failed to update file info")
@@ -266,7 +300,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config,
 		}
 
 		logger.Debug("copying file")
-		fileSize, err := u.fs.Create(ctx, fmt.Sprintf("%s/%s", feedID, episodeName), tempFile)
+		fileSize, err := u.fs.Create(ctx, objectKey, tempFile)
 		tempFile.Close()
 		if err != nil {
 			logger.WithError(err).Error("failed to copy file")
@@ -276,7 +310,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config,
 		// Execute post episode download hooks
 		if len(feedConfig.PostEpisodeDownload) > 0 {
 			env := []string{
-				"EPISODE_FILE=" + fmt.Sprintf("%s/%s", feedID, episodeName),
+				"EPISODE_FILE=" + objectKey,
 				"FEED_NAME=" + feedID,
 				"EPISODE_TITLE=" + episode.Title,
 			}
@@ -296,6 +330,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config,
 		if err := u.db.UpdateEpisode(feedID, episode.ID, func(episode *model.Episode) error {
 			episode.Size = fileSize
 			episode.Status = model.EpisodeDownloaded
+			episode.ObjectKey = objectKey
 			return nil
 		}); err != nil {
 			return err
@@ -316,7 +351,14 @@ func (u *Manager) buildXML(ctx context.Context, feedConfig *feed.Config) error {
 
 	// Build iTunes XML feed with data received from builder
 	log.Debug("building iTunes podcast feed")
-	podcast, err := feed.Build(ctx, f, feedConfig, u.hostname)
+	// Backfill a canonical key in-memory for legacy rows. It will be persisted
+	// the next time the episode is observed or downloaded.
+	for _, episode := range f.Episodes {
+		if episode.ObjectKey == "" {
+			episode.ObjectKey = u.episodeObjectKey(feedConfig, episode)
+		}
+	}
+	podcast, err := feed.Build(ctx, f, feedConfig, u.publicURL)
 	if err != nil {
 		return err
 	}
@@ -326,7 +368,7 @@ func (u *Manager) buildXML(ctx context.Context, feedConfig *feed.Config) error {
 		xmlName = fmt.Sprintf("%s.xml", feedConfig.ID)
 	)
 
-	if _, err := u.fs.Create(ctx, xmlName, reader); err != nil {
+	if _, err := u.fs.Create(ctx, u.fs.ObjectKey(xmlName), reader); err != nil {
 		return errors.Wrap(err, "failed to upload new XML feed")
 	}
 
@@ -336,7 +378,7 @@ func (u *Manager) buildXML(ctx context.Context, feedConfig *feed.Config) error {
 func (u *Manager) buildOPML(ctx context.Context) error {
 	// Build OPML with data received from builder
 	log.Debug("building podcast OPML")
-	opml, err := feed.BuildOPML(ctx, u.feeds, u.db, u.hostname)
+	opml, err := feed.BuildOPML(ctx, u.feeds, u.db, u.publicURL)
 	if err != nil {
 		return err
 	}
@@ -346,7 +388,7 @@ func (u *Manager) buildOPML(ctx context.Context) error {
 		xmlName = fmt.Sprintf("%s.opml", "podsync")
 	)
 
-	if _, err := u.fs.Create(ctx, xmlName, reader); err != nil {
+	if _, err := u.fs.Create(ctx, u.fs.ObjectKey(xmlName), reader); err != nil {
 		return errors.Wrap(err, "failed to upload OPML")
 	}
 
@@ -393,10 +435,7 @@ func (u *Manager) cleanup(ctx context.Context, feedConfig *feed.Config) error {
 	for _, episode := range list[count:] {
 		logger.WithField("episode_id", episode.ID).Infof("deleting %q", episode.Title)
 
-		var (
-			episodeName = feed.EpisodeName(feedConfig, episode)
-			path        = fmt.Sprintf("%s/%s", feedConfig.ID, episodeName)
-		)
+		path := u.episodeObjectKey(feedConfig, episode)
 
 		err := u.fs.Delete(ctx, path)
 		if err != nil {
@@ -421,4 +460,12 @@ func (u *Manager) cleanup(ctx context.Context, feedConfig *feed.Config) error {
 	}
 
 	return result.ErrorOrNil()
+}
+
+func (u *Manager) episodeObjectKey(feedConfig *feed.Config, episode *model.Episode) string {
+	if episode.ObjectKey != "" {
+		return episode.ObjectKey
+	}
+	logicalName := fmt.Sprintf("%s/%s", feedConfig.ID, feed.EpisodeName(feedConfig, episode))
+	return u.fs.ObjectKey(logicalName)
 }

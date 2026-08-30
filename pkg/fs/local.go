@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -25,6 +27,10 @@ type Local struct {
 
 func NewLocal(rootDir string, webUIEnabled bool) (*Local, error) {
 	return &Local{rootDir: rootDir, WebUIEnabled: webUIEnabled}, nil
+}
+
+func (l *Local) ObjectKey(name string) string {
+	return strings.TrimPrefix(path.Clean("/"+name), "/")
 }
 
 func (l *Local) Open(name string) (http.File, error) {

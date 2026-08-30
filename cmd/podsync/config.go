@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -130,6 +131,17 @@ func (c *Config) validate() error {
 		if c.Storage.S3.EndpointURL == "" || c.Storage.S3.Region == "" || c.Storage.S3.Bucket == "" {
 			result = multierror.Append(result, errors.New("S3 storage requires endpoint_url, region and bucket to be set"))
 		}
+	case "r2":
+		r2 := c.Storage.R2
+		if r2.EndpointURL == "" || r2.Bucket == "" || r2.AccessKeyID == "" || r2.SecretAccessKey == "" || r2.PublicURL == "" {
+			result = multierror.Append(result, errors.New("R2 storage requires endpoint_url, bucket, access_key_id, secret_access_key and public_url to be set"))
+		}
+		if r2.PublicURL != "" {
+			parsed, err := url.Parse(r2.PublicURL)
+			if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+				result = multierror.Append(result, errors.New("R2 public_url must be an absolute HTTP(S) URL"))
+			}
+		}
 	default:
 		result = multierror.Append(result, errors.Errorf("unknown storage type: %s", c.Storage.Type))
 	}
@@ -247,6 +259,20 @@ func (c *Config) applyEnv() {
 			// Support multiple keys separated by spaces for API key rotation
 			keys := strings.Fields(val)
 			c.Tokens[provider] = keys
+		}
+	}
+
+	r2Env := map[string]*string{
+		"PODSYNC_R2_ENDPOINT_URL":      &c.Storage.R2.EndpointURL,
+		"PODSYNC_R2_ACCESS_KEY_ID":     &c.Storage.R2.AccessKeyID,
+		"PODSYNC_R2_SECRET_ACCESS_KEY": &c.Storage.R2.SecretAccessKey,
+		"PODSYNC_R2_BUCKET":            &c.Storage.R2.Bucket,
+		"PODSYNC_R2_PUBLIC_URL":        &c.Storage.R2.PublicURL,
+	}
+	for envVar, target := range r2Env {
+		if value, ok := os.LookupEnv(envVar); ok {
+			*target = value
+			log.Infof("Found %s environment variable, replacing R2 configuration value", envVar)
 		}
 	}
 }

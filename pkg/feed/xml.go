@@ -141,10 +141,11 @@ func Build(_ctx context.Context, feed *model.Feed, cfg *Config, hostname string)
 			enclosureType = EnclosureFromExtension(cfg)
 		}
 
-		var (
-			episodeName = EpisodeName(cfg, episode)
-			downloadURL = fmt.Sprintf("%s/%s/%s", strings.TrimRight(hostname, "/"), cfg.ID, episodeName)
-		)
+		objectKey := episode.ObjectKey
+		if objectKey == "" {
+			objectKey = fmt.Sprintf("%s/%s", cfg.ID, EpisodeName(cfg, episode))
+		}
+		downloadURL := fmt.Sprintf("%s/%s", strings.TrimRight(hostname, "/"), strings.TrimLeft(objectKey, "/"))
 
 		item.AddEnclosure(downloadURL, enclosureType, episode.Size)
 

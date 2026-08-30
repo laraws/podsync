@@ -62,6 +62,7 @@ type episodeRow struct {
 	EpisodeOrder string    `gorm:"column:episode_order"`
 	Status       string    `gorm:"column:status"`
 	Size         int64     `gorm:"column:size"`
+	ObjectKey    string    `gorm:"column:object_key;type:varchar(1024);not null;default:''"`
 }
 
 func (episodeRow) TableName() string { return "episodes" }
@@ -173,6 +174,13 @@ func (s *SQL) initSchema() error {
 			return errors.Wrapf(err, "failed to initialize database schema with %q", firstLine(statement))
 		}
 	}
+	// Keep existing installations compatible with the embedded schema. GORM's
+	// dialect-aware migrator emits the appropriate ALTER TABLE for SQLite/MySQL.
+	if !s.db.Migrator().HasColumn(&episodeRow{}, "ObjectKey") {
+		if err := s.db.Migrator().AddColumn(&episodeRow{}, "ObjectKey"); err != nil {
+			return errors.Wrap(err, "failed to add episodes.object_key column")
+		}
+	}
 	return nil
 }
 
@@ -215,6 +223,7 @@ func (s *SQL) AddFeed(ctx context.Context, feedID string, feed *model.Feed) erro
 				EpisodeOrder: episode.Order,
 				Status:       string(episode.Status),
 				Size:         episode.Size,
+				ObjectKey:    episode.ObjectKey,
 			}
 			if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&er).Error; err != nil {
 				return errors.Wrapf(err, "failed to save episode %q", episode.ID)
@@ -306,6 +315,7 @@ func (s *SQL) UpdateEpisode(feedID, episodeID string, cb func(episode *model.Epi
 				"episode_order": episode.Order,
 				"status":        string(episode.Status),
 				"size":          episode.Size,
+				"object_key":    episode.ObjectKey,
 			}).Error; err != nil {
 			return err
 		}
@@ -373,6 +383,7 @@ func assembleEpisode(er episodeRow) *model.Episode {
 		Size:        er.Size,
 		Order:       er.EpisodeOrder,
 		Status:      model.EpisodeStatus(er.Status),
+		ObjectKey:   er.ObjectKey,
 	}
 }
 

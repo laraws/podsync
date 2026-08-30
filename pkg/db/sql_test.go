@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -43,12 +44,14 @@ func TestSQLStorage(t *testing.T) {
 	require.NoError(t, database.UpdateEpisode(feed.ID, feed.Episodes[0].ID, func(episode *model.Episode) error {
 		episode.Size = 333
 		episode.Status = model.EpisodeDownloaded
+		episode.ObjectKey = "podcasts/feed-1/episode-1.mp3"
 		return nil
 	}))
 	actualEpisode, err = database.GetEpisode(ctx, feed.ID, feed.Episodes[0].ID)
 	require.NoError(t, err)
 	assert.EqualValues(t, 333, actualEpisode.Size)
 	assert.Equal(t, model.EpisodeDownloaded, actualEpisode.Status)
+	assert.Equal(t, "podcasts/feed-1/episode-1.mp3", actualEpisode.ObjectKey)
 
 	count := 0
 	require.NoError(t, database.WalkFeeds(ctx, func(*model.Feed) error { count++; return nil }))
@@ -66,6 +69,7 @@ func TestNewInitializesSimplifiedSchema(t *testing.T) {
 
 	assert.True(t, database.db.Migrator().HasTable("feeds"))
 	assert.True(t, database.db.Migrator().HasTable("episodes"))
+	assert.True(t, database.db.Migrator().HasColumn(&episodeRow{}, "ObjectKey"))
 	assert.False(t, database.db.Migrator().HasTable("feed_metadata"))
 	assert.False(t, database.db.Migrator().HasTable("feed_settings"))
 	assert.False(t, database.db.Migrator().HasTable("episode_states"))
@@ -74,6 +78,24 @@ func TestNewInitializesSimplifiedSchema(t *testing.T) {
 	var foreignKeys []struct{ Table string }
 	require.NoError(t, database.db.Raw("PRAGMA foreign_key_list(episodes)").Scan(&foreignKeys).Error)
 	assert.Empty(t, foreignKeys)
+}
+
+func TestNewAddsObjectKeyToExistingSQLiteSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	raw, err := sql.Open("sqlite3", path)
+	require.NoError(t, err)
+	_, err = raw.Exec(`CREATE TABLE episodes (
+		feed_id TEXT NOT NULL,
+		id TEXT NOT NULL,
+		PRIMARY KEY (feed_id, id)
+	)`)
+	require.NoError(t, err)
+	require.NoError(t, raw.Close())
+
+	database, err := New(&Config{Type: "sqlite", DSN: path})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, database.Close()) })
+	assert.True(t, database.db.Migrator().HasColumn(&episodeRow{}, "ObjectKey"))
 }
 
 func TestNewRejectsUnsupportedDriver(t *testing.T) {
