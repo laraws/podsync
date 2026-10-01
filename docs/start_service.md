@@ -19,6 +19,7 @@
 - 数据库：`175.178.51.216:3306/podsync-dev`，MySQL TLS 加密连接。
 - HTTP 地址：`http://localhost:8080`，仅监听 `127.0.0.1`。
 - 下载器：使用 PATH 中的 `yt-dlp`，不自动升级。
+- 日志：写入 `log/YYYY-MM-DD.log`，按进程本地时区每日一个文件。
 - 保留现有的 `PK1` 播放列表，查询页大小为 1，不配置自动清理。
 - 显式设置 `cron_schedule = "@every 1h"`，启动时不立即同步，约一小时后首次执行。
 
@@ -28,7 +29,7 @@
 # 仅在文件不存在时复制，避免覆盖已有凭据。
 cp -n config.local-mysql.toml.example config.local-mysql.toml
 chmod 600 config.local-mysql.toml
-mkdir -p data
+mkdir -p data log
 ```
 
 填写模板的数据库密码、YouTube API Key，并准备 `cookie.txt`；不使用 cookies 时删除 `youtube_dl_args` 中的 `"--cookies", "cookie.txt"` 两项。也可以通过 `PODSYNC_YOUTUBE_API_KEY` 设置 API Key，它会覆盖 TOML 中的对应 token。
@@ -66,6 +67,21 @@ go run ./cmd/podsync --config config.local-mysql.toml --no-banner
 ```
 
 前台运行按 `Ctrl+C` 停止。需要排查问题时添加 `--debug`。
+
+配置已启用每日文件日志，运行期间的日志写入 `log` 目录：
+
+```toml
+[log]
+dir = "log"
+```
+
+目录会自动创建，同一天重启追加到当天文件；跨天后的第一条日志自动写入新文件，例如 `log/2026-10-01.log`、`log/2026-10-02.log`。文件不会自动压缩或删除。`dir` 优先于旧的 `filename` 配置，每日模式不使用 `max_size`、`max_age`、`max_backups` 和 `compress`。
+
+```bash
+tail -f "log/$(date +%F).log"
+```
+
+跨天后重新执行 `tail` 查看新文件。文件日期采用运行进程的本地时区；需要固定北京时间时可设置 `TZ=Asia/Shanghai`。配置加载之前的启动输出和错误仍会显示在终端。
 
 ## 3. 编译后二进制运行
 
@@ -106,6 +122,7 @@ mkdir -p data
 docker run -d --name podsync --restart unless-stopped \
   -p 127.0.0.1:8080:8080 \
   -v "$PWD/data:/app/data" \
+  -v "$PWD/log:/app/log" \
   -v "$PWD/config.docker.toml:/app/config.toml:ro" \
   -v "$PWD/cookie.txt:/app/cookie.txt:ro" \
   podsync:local --config /app/config.toml --no-banner
@@ -115,11 +132,13 @@ docker stop podsync
 docker start podsync
 ```
 
+每日完整日志保存在宿主机 `./log`，`docker logs` 主要显示配置加载前的输出。容器默认时区可能是 UTC，需要北京时间时为 `docker run` 添加 `-e TZ=Asia/Shanghai`。
+
 使用 MySQL 不需要挂载 SQLite 的 `db` 目录。不使用 cookies 时删除对应挂载。配置源文件和 cookie 文件必须真实存在。
 
 ## 5. Docker Compose 运行
 
-仓库现有 `docker-compose.yml` 会构建本地代码，使用 `laraws/podsync` 镜像名，挂载 `config.toml`、`data`、`db` 和 `cookie.txt`，并设置 `restart: always`。
+仓库现有 `docker-compose.yml` 会构建本地代码，使用 `laraws/podsync` 镜像名，挂载 `config.toml`、`data`、`log`、`db` 和 `cookie.txt`，并设置 `restart: always`。
 
 使用原有配置启动：
 
@@ -138,10 +157,13 @@ services:
     build: .
     image: podsync:local
     restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/app/data
+      - ./log:/app/log
       - ./config.docker.toml:/app/config.toml:ro
       - ./cookie.txt:/app/cookie.txt:ro
     command: ["--config", "/app/config.toml", "--no-banner"]
@@ -190,6 +212,8 @@ sudo journalctl -u podsync -f
 sudo systemctl restart podsync
 sudo systemctl stop podsync
 ```
+
+每日完整日志位于 `/opt/podsync/log`；运行用户需有该目录的写权限，`journalctl` 主要显示配置加载前的输出。
 
 ## 7. 单次更新与检查
 

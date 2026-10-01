@@ -96,21 +96,30 @@ func main() {
 		log.WithError(err).Fatal("failed to load configuration file")
 	}
 
-	if cfg.Log.Filename != "" {
+	if cfg.Log.Dir != "" {
+		writer, err := newDailyLogWriter(cfg.Log.Dir, time.Now)
+		if err != nil {
+			log.WithError(err).Fatal("failed to open daily log file")
+		}
+		defer writer.Close()
+		log.SetOutput(writer)
+		log.Infof("using daily log directory: %s", cfg.Log.Dir)
+	} else if cfg.Log.Filename != "" {
 		log.Infof("Using log file: %s", cfg.Log.Filename)
 
-		log.SetOutput(&lumberjack.Logger{
+		writer := &lumberjack.Logger{
 			Filename:   cfg.Log.Filename,
 			MaxSize:    cfg.Log.MaxSize,
 			MaxBackups: cfg.Log.MaxBackups,
 			MaxAge:     cfg.Log.MaxAge,
 			Compress:   cfg.Log.Compress,
-		})
-
-		// Optionally enable debug mode from config.toml
-		if cfg.Log.Debug {
-			log.SetLevel(log.DebugLevel)
 		}
+		defer writer.Close()
+		log.SetOutput(writer)
+	}
+
+	if cfg.Log.Debug {
+		log.SetLevel(log.DebugLevel)
 	}
 
 	downloader, err := ytdl.New(ctx, cfg.Downloader)

@@ -186,9 +186,12 @@ timeout = 15
 
 # Optional log config. If not specified logs to the stdout
 [log]
-filename = "podsync.log"
-max_size = 50 # MB
-max_age = 30 # days
-max_backups = 7
-compress = true
+dir = "log" # One YYYY-MM-DD.log file per day, using the process local timezone.
+# Daily files are appended to on restart and are not automatically deleted.
+# Legacy size-based rotation is still available if dir is omitted:
+# filename = "podsync.log"
+# max_size = 50 # MB
+# max_age = 30 # days
+# max_backups = 7
+# compress = true
 debug = false

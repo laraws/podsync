@@ -42,4 +42,5 @@ custom_binary = "yt-dlp"
 self_update = false
 timeout = 10
 
-# 不设置 [log].filename，日志输出到终端，方便排查。
+[log]
+dir = "log" # 按进程本地时区写入 log/YYYY-MM-DD.log，跨天自动切换。

@@ -42,6 +42,9 @@ type Config struct {
 }
 
 type Log struct {
+	// Dir enables daily log files named YYYY-MM-DD.log, using local time.
+	// When set, it takes precedence over the legacy filename rotation settings.
+	Dir string `toml:"dir"`
 	// Filename to write the log to (instead of stdout)
 	Filename string `toml:"filename"`
 	// MaxSize is the maximum size of the log file in MB
