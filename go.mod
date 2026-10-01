@@ -14,6 +14,7 @@ require (
 	github.com/gabriel-vasile/mimetype v1.4.12
 	github.com/gilliek/go-opml v1.0.0
 	github.com/go-sql-driver/mysql v1.7.0
+	github.com/go-telegram/bot v1.27.0
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/golang/mock v1.6.0
 	github.com/hashicorp/go-multierror v1.1.1

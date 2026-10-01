@@ -24,6 +24,16 @@ type Config struct {
 	Downloader Downloader `mapstructure:"downloader"`
 	// Global cleanup policy applied to feeds that don't specify their own cleanup policy
 	Cleanup *Cleanup `mapstructure:"cleanup"`
+	// Telegram sends a notification after each episode download attempt.
+	Telegram Telegram `mapstructure:"telegram"`
+}
+
+type Telegram struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	BotToken string `mapstructure:"bot_token"`
+	UserID   int64  `mapstructure:"user_id"`
+	// Timeout bounds the entire notification, including rate-limit retries.
+	Timeout time.Duration `mapstructure:"timeout"`
 }
 
 type Log struct {

@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/notify"
 	"github.com/mxpv/podsync/pkg/builder"
 	"github.com/mxpv/podsync/pkg/db"
 	"github.com/mxpv/podsync/pkg/feed"
@@ -36,6 +37,7 @@ type Manager struct {
 	fs         fs.Storage
 	feeds      map[string]*appconfig.Feed
 	keys       map[model.Provider]feed.KeyProvider
+	notifier   notify.EpisodeNotifier
 }
 
 func NewUpdater(
@@ -45,6 +47,7 @@ func NewUpdater(
 	downloader Downloader,
 	db db.Storage,
 	fs fs.Storage,
+	notifier notify.EpisodeNotifier,
 ) (*Manager, error) {
 	return &Manager{
 		publicURL:  publicURL,
@@ -53,6 +56,7 @@ func NewUpdater(
 		fs:         fs,
 		feeds:      feeds,
 		keys:       keys,
+		notifier:   notifier,
 	}, nil
 }
 
@@ -244,8 +248,21 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *appconfig.Fe
 	}
 
 	// Download pending episodes
+	feedTitle := feedConfig.Custom.Title
+	if u.notifier != nil && feedTitle == "" {
+		stored, err := u.db.GetFeed(ctx, feedID)
+		if err == nil && stored != nil {
+			feedTitle = stored.Title
+		} else if err != nil {
+			log.WithError(err).Warn("failed to read feed title for notification")
+		}
+	}
+	if feedTitle == "" {
+		feedTitle = feedID
+	}
 
 	for idx, episode := range downloadList {
+		started := time.Now()
 		var (
 			logger    = log.WithFields(log.Fields{"index": idx, "episode_id": episode.ID})
 			objectKey = u.episodeObjectKey(feedConfig, episode)
@@ -272,6 +289,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *appconfig.Fe
 			// Will download, do nothing here
 		} else {
 			logger.WithError(err).Error("failed to stat file")
+			u.notifyEpisode(ctx, feedConfig, feedTitle, episode, started, 0, errors.Wrap(err, "check episode file failed"))
 			return err
 		}
 
@@ -282,19 +300,25 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *appconfig.Fe
 		logger.Infof("! downloading episode %s", episode.VideoURL)
 		tempFile, err := u.downloader.Download(ctx, feedConfig, episode)
 		if err != nil {
+			downloadErr := err
+			logger.WithError(downloadErr).Error("episode download failed")
+			stateErr := u.db.UpdateEpisode(feedID, episode.ID, func(episode *model.Episode) error {
+				episode.Status = model.EpisodeError
+				return nil
+			})
+			if stateErr != nil {
+				err = errors.Wrapf(stateErr, "failed to record download failure (%v)", downloadErr)
+			}
+			u.notifyEpisode(ctx, feedConfig, feedTitle, episode, started, 0, err)
+			if stateErr != nil {
+				return err
+			}
 			// YouTube might block host with HTTP Error 429: Too Many Requests
 			// We still need to generate XML, so just stop sending download requests and
 			// retry next time
-			if err == ytdl.ErrTooManyRequests {
+			if errors.Is(downloadErr, ytdl.ErrTooManyRequests) {
 				logger.Warn("server responded with a 'Too Many Requests' error")
 				break
-			}
-
-			if err := u.db.UpdateEpisode(feedID, episode.ID, func(episode *model.Episode) error {
-				episode.Status = model.EpisodeError
-				return nil
-			}); err != nil {
-				return err
 			}
 
 			continue
@@ -305,6 +329,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *appconfig.Fe
 		tempFile.Close()
 		if err != nil {
 			logger.WithError(err).Error("failed to copy file")
+			u.notifyEpisode(ctx, feedConfig, feedTitle, episode, started, 0, errors.Wrap(err, "save episode file failed"))
 			return err
 		}
 
@@ -334,14 +359,32 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *appconfig.Fe
 			episode.ObjectKey = objectKey
 			return nil
 		}); err != nil {
+			u.notifyEpisode(ctx, feedConfig, feedTitle, episode, started, fileSize, errors.Wrap(err, "record downloaded episode failed"))
 			return err
 		}
 
+		u.notifyEpisode(ctx, feedConfig, feedTitle, episode, started, fileSize, nil)
 		downloaded++
 	}
 
 	log.Infof("downloaded %d episode(s)", downloaded)
 	return nil
+}
+
+func (u *Manager) notifyEpisode(ctx context.Context, cfg *appconfig.Feed, feedTitle string, episode *model.Episode, started time.Time, size int64, downloadErr error) {
+	if u.notifier == nil {
+		return
+	}
+	result := notify.EpisodeResult{
+		FeedID: cfg.ID, FeedTitle: feedTitle,
+		EpisodeID: episode.ID, EpisodeTitle: episode.Title, EpisodeURL: episode.VideoURL,
+		At: time.Now(), Duration: time.Since(started), Size: size, Err: downloadErr,
+	}
+	// A completed attempt is reported even if its download context was canceled.
+	// The notifier bounds its own request timeout, including during shutdown.
+	if err := u.notifier.NotifyEpisode(context.WithoutCancel(ctx), result); err != nil {
+		log.WithError(err).WithFields(log.Fields{"feed_id": cfg.ID, "episode_id": episode.ID}).Error("episode notification failed")
+	}
 }
 
 func (u *Manager) buildXML(ctx context.Context, feedConfig *appconfig.Feed) error {

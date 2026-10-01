@@ -42,3 +42,11 @@ downloader:
   timeout: 10
 log:
   dir: "log"
+
+# 启用后逐个通知 episode 下载结果。先向 Bot 发送 /start。
+# 推荐通过 PODSYNC_TELEGRAM_BOT_TOKEN 设置 token。
+telegram:
+  enabled: false
+  bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+  user_id: 0
+  timeout: "10s"

@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -25,6 +26,14 @@ func LoadDatabaseConfig(path string) (*Database, error) {
 
 func (c *Config) validate() error {
 	var result *multierror.Error
+	if c.Telegram.Enabled {
+		if strings.TrimSpace(c.Telegram.BotToken) == "" || c.Telegram.UserID == 0 {
+			result = multierror.Append(result, errors.New("Telegram notifications require bot_token and a nonzero user_id"))
+		}
+		if c.Telegram.Timeout <= 0 {
+			result = multierror.Append(result, errors.New("Telegram timeout must be positive"))
+		}
+	}
 
 	if c.Server.Path != "" {
 		var pathReg = regexp.MustCompile(PathRegex)
@@ -80,6 +89,9 @@ func (c *Config) validate() error {
 }
 
 func (c *Config) applyDefaults(configPath string) {
+	if c.Telegram.Timeout == 0 {
+		c.Telegram.Timeout = DefaultTelegramTimeout
+	}
 	if c.Server.Hostname == "" {
 		if c.Server.Port != 0 && c.Server.Port != 80 {
 			c.Server.Hostname = fmt.Sprintf("http://localhost:%d", c.Server.Port)

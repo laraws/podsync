@@ -146,3 +146,13 @@ log:
   # max_age: 30 # days
   # max_backups: 7
   # compress: false
+
+# Send each episode's download result to a Telegram user via a send-only bot.
+# Environment overrides: PODSYNC_TELEGRAM_ENABLED, PODSYNC_TELEGRAM_BOT_TOKEN,
+# PODSYNC_TELEGRAM_USER_ID, PODSYNC_TELEGRAM_TIMEOUT.
+telegram:
+  enabled: false
+  bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+  user_id: 0
+  # Total notification timeout, including 429 retry waits.
+  timeout: "10s"

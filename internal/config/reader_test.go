@@ -180,3 +180,32 @@ func TestYAMLOnlyAndStrictDocuments(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(filepath.Dir(path), "db", "podsync.db"), cfg.DSN)
 }
+
+func TestTelegramConfiguration(t *testing.T) {
+	t.Setenv("PODSYNC_TELEGRAM_ENABLED", "true")
+	t.Setenv("PODSYNC_TELEGRAM_BOT_TOKEN", "123:environment-key")
+	t.Setenv("PODSYNC_TELEGRAM_USER_ID", "9876543210")
+	t.Setenv("PODSYNC_TELEGRAM_TIMEOUT", "3s")
+	path := writeConfig(t, "storage:\n  local:\n    data_dir: ./data\nfeeds:\n  PK1:\n    url: https://example.com/feed\ntelegram:\n  bot_token: file-key\n")
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+	assert.True(t, cfg.Telegram.Enabled)
+	assert.Equal(t, "123:environment-key", cfg.Telegram.BotToken)
+	assert.EqualValues(t, 9876543210, cfg.Telegram.UserID)
+	assert.Equal(t, 3*time.Second, cfg.Telegram.Timeout)
+}
+
+func TestTelegramValidation(t *testing.T) {
+	base := "storage:\n  local:\n    data_dir: ./data\nfeeds:\n  PK1:\n    url: https://example.com/feed\n"
+	for _, section := range []string{
+		"telegram:\n  enabled: true\n",
+		"telegram:\n  enabled: true\n  bot_token: test-key\n",
+		"telegram:\n  enabled: true\n  bot_token: test-key\n  user_id: 1\n  timeout: -1s\n",
+	} {
+		_, err := LoadConfig(writeConfig(t, base+section))
+		require.Error(t, err)
+	}
+	cfg, err := LoadConfig(writeConfig(t, base+"telegram:\n  enabled: true\n  bot_token: test-key\n  user_id: 1\n"))
+	require.NoError(t, err)
+	assert.Equal(t, DefaultTelegramTimeout, cfg.Telegram.Timeout)
+}

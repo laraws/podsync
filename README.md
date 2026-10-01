@@ -115,6 +115,22 @@ storage:
 
 Set the credentials with `PODSYNC_R2_ACCESS_KEY_ID` and `PODSYNC_R2_SECRET_ACCESS_KEY`. Downloaded episode rows persist only the object key; RSS enclosure URLs are assembled from `public_url` at generation time.
 
+### Telegram episode notifications
+
+Use a Telegram bot to receive one MarkdownV2 message per episode download attempt. Messages include completion time with timezone, feed and episode titles/IDs, elapsed time, source URL, and either file size or a failure reason. Titles use the feed's custom title when configured. Existing files and filtered/skipped episodes do not generate notifications.
+
+```yaml
+telegram:
+  enabled: true
+  bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+  user_id: 123456789
+  timeout: "10s"
+```
+
+Start a private chat with the bot and send `/start` before enabling notifications. `user_id` is used as Telegram's `chat_id`. Prefer `PODSYNC_TELEGRAM_BOT_TOKEN` to keep credentials out of shared configuration. All four fields accept their corresponding `PODSYNC_TELEGRAM_*` environment variables.
+
+Notifications use the [go-telegram/bot SDK](https://github.com/go-telegram/bot) without polling or webhooks. Markdown characters are escaped and long fields are truncated within Telegram's message limit. Telegram 429 responses retry up to three attempts within the configured total timeout; other send errors are logged without changing download status or stopping subsequent downloads. The timeout defaults to 10 seconds, including during shutdown. Network access uses Go's standard `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` settings.
+
 ### 🌍 Environment Variables
 
 Podsync supports the following environment variables for configuration and API keys:

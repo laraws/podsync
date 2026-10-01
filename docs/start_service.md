@@ -75,6 +75,29 @@ PODSYNC_LOG_DIR=log \
 
 切换到 local 不会自动迁移 R2 中的历史文件。数据库中原有的下载记录仍然保留，后续同步时缺失的本地媒体可能被重新下载。`page_size: 1` 是 API 查询页大小，不保证一次同步总共只下载一个节目。
 
+### Telegram 下载通知
+
+本地实际配置已启用 Telegram。每次 episode 下载完成后发送一条 MarkdownV2 消息，包含完成时间及时区、feed/episode 标题和 ID、耗时、来源链接；成功显示文件大小，失败显示原因。自定义 feed 标题优先使用。已存在、被过滤或跳过的 episode 不通知；后续重试有新的下载结果时再次通知。
+
+```yaml
+telegram:
+  enabled: true
+  bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+  user_id: 123456789
+  timeout: "10s"
+```
+
+首次使用先向 Bot 发送 `/start`。Bot token 可通过 `PODSYNC_TELEGRAM_BOT_TOKEN` 覆盖，其他变量为 `PODSYNC_TELEGRAM_ENABLED`、`PODSYNC_TELEGRAM_USER_ID`、`PODSYNC_TELEGRAM_TIMEOUT`。发送使用 Go SDK，无需设置 webhook 或启动 Bot 轮询。
+
+下载器报错（包括 HTTP 429）、文件检查/保存失败和下载状态写入失败都会发送失败通知。下载后的自定义钩子报错仍只记录日志，下载结果保持成功。Telegram 限流最多发送三次，并遵守 `retry_after`；整个通知最长等待 `timeout`（默认 10 秒）。通知发送失败写入日志，不改变下载状态、不阻止后续下载。进程退出时也会尝试发送已完成下载的结果，并受同一超时限制。
+
+若所在网络无法直接访问 Telegram，可设置标准 `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` 环境变量。显式实发自测命令会发送两条标注“模拟事件，无实际下载”的消息，正常单元测试不发送真实消息：
+
+```bash
+PODSYNC_TELEGRAM_LIVE_CONFIG="$PWD/config.local-mysql.yaml" \
+go test ./internal/notify -run '^TestTelegramLive$' -count=1 -v
+```
+
 ## 2. 源码运行
 
 需要 Go 1.25 或更高版本、`yt-dlp`、`ffmpeg`。当前 Dockerfile 还准备了 Deno 和 yt-dlp EJS 支持，用于 YouTube JS challenge；本地下载遇到相关错误时也要检查这些依赖。

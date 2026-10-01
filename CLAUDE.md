@@ -14,6 +14,7 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 
 ### Internal Packages (`internal/`)
 - **config/**: Central configuration types, YAML/Viper loading, environment bindings, defaults, and validation
+- **notify/**: Send-only Telegram SDK notifications for episode download results
 - **buildinfo/**: Shared build metadata for CLI version output and startup logs; injected by Makefile and GoReleaser
 
 Configuration defaults belong in `internal/config/defaults.go`. Domain enums stay in `pkg/model`; runtime constants and mutable state stay with the component that owns them.

@@ -17,6 +17,7 @@ import (
 
 	"github.com/mxpv/podsync/internal/buildinfo"
 	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/notify"
 	"github.com/mxpv/podsync/pkg/db"
 	"github.com/mxpv/podsync/pkg/feed"
 	"github.com/mxpv/podsync/pkg/fs"
@@ -160,7 +161,16 @@ func runService(ctx context.Context, opts serviceOptions) error {
 	}
 
 	log.Debug("creating update manager")
-	manager, err := update.NewUpdater(cfg.Feeds, keys, publicURL, downloader, database, storage)
+	telegram, err := notify.NewTelegram(cfg.Telegram)
+	if err != nil {
+		return fmt.Errorf("failed to configure Telegram notifications: %w", err)
+	}
+	var notifier notify.EpisodeNotifier
+	if telegram != nil {
+		notifier = telegram
+		log.Info("Telegram episode notifications enabled")
+	}
+	manager, err := update.NewUpdater(cfg.Feeds, keys, publicURL, downloader, database, storage, notifier)
 	if err != nil {
 		return fmt.Errorf("failed to create updater: %w", err)
 	}
