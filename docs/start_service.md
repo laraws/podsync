@@ -1,15 +1,31 @@
 # Podsync 服务启动说明
 
-下列命令均从项目根目录执行。配置文件通过 `--config` 选择，不需要覆盖现有的 `config.toml`。
+下列命令均从项目根目录执行。配置文件通过 `--config` / `-c` 选择，不需要覆盖现有的 `config.toml`。
 
 | 方式 | 适用场景 | 启动命令 |
 | --- | --- | --- |
-| 源码运行 | 本地开发 | `go run ./cmd/podsync --config config.local-mysql.toml` |
-| 编译后二进制 | 本地运行或服务器部署 | `make build` 后执行 `./bin/podsync --config config.local-mysql.toml` |
+| 源码运行 | 本地开发 | `go run ./cmd/podsync serve -c config.local-mysql.toml` |
+| 编译后二进制 | 本地运行或服务器部署 | `make build` 后执行 `./bin/podsync serve -c config.local-mysql.toml` |
 | Docker | 独立容器 | 构建本仓库镜像，再挂载配置和数据目录 |
 | Docker Compose | 后台运行、自动重启 | `docker compose up -d --build` |
 | systemd | Linux 开机启动 | `sudo systemctl enable --now podsync` |
-| 单次更新 | 手动同步或外部定时任务 | 在二进制命令后添加 `--headless` |
+| 单次更新 | 手动同步或外部定时任务 | `./bin/podsync update -c config.local-mysql.toml` |
+
+CLI 使用 Cobra。`serve` 常驻运行，`update` 同步一次后退出，`init-db` 初始化数据库。直接执行 `podsync` 显示帮助，启动服务必须指定 `serve`。全局参数 `--config`、`--debug`、`--no-banner` 可放在子命令前或后。
+
+```bash
+./bin/podsync --help
+./bin/podsync serve --help
+./bin/podsync update --help
+./bin/podsync init-db --help
+./bin/podsync --version
+```
+
+生成 zsh 补全文件后，将它放入自己的 zsh `$fpath` 目录并初始化 `compinit`；也支持 `bash`、`fish`、`powershell`：
+
+```bash
+./bin/podsync completion zsh > /tmp/_podsync
+```
 
 ## 1. 选择配置
 
@@ -37,9 +53,9 @@ mkdir -p data log
 切换配置的两种方式：
 
 ```bash
-./bin/podsync --config config.local-mysql.toml --no-banner
+./bin/podsync serve -c config.local-mysql.toml --no-banner
 
-PODSYNC_CONFIG_PATH=config.local-mysql.toml ./bin/podsync --no-banner
+PODSYNC_CONFIG_PATH=config.local-mysql.toml ./bin/podsync serve --no-banner
 ```
 
 显式 `--config` 优先于 `PODSYNC_CONFIG_PATH`；二者都没有时读取工作目录中的 `config.toml`。相对存储、cookies 和下载器路径以进程工作目录为准。
@@ -63,7 +79,7 @@ deno --version
 
 ```bash
 mkdir -p data
-go run ./cmd/podsync --config config.local-mysql.toml --no-banner
+go run ./cmd/podsync serve -c config.local-mysql.toml --no-banner
 ```
 
 前台运行按 `Ctrl+C` 停止。需要排查问题时添加 `--debug`。
@@ -87,7 +103,7 @@ tail -f "log/$(date +%F).log"
 
 ```bash
 make build
-./bin/podsync --config config.local-mysql.toml --no-banner
+./bin/podsync serve -c config.local-mysql.toml --no-banner
 ```
 
 `make build` 只构建，默认 `make` 还会运行测试。构建后执行二进制不需要 Go，但仍然需要下载器和 `ffmpeg`。
@@ -125,7 +141,7 @@ docker run -d --name podsync --restart unless-stopped \
   -v "$PWD/log:/app/log" \
   -v "$PWD/config.docker.toml:/app/config.toml:ro" \
   -v "$PWD/cookie.txt:/app/cookie.txt:ro" \
-  podsync:local --config /app/config.toml --no-banner
+  podsync:local serve --config /app/config.toml --no-banner
 
 docker logs -f podsync
 docker stop podsync
@@ -166,7 +182,7 @@ services:
       - ./log:/app/log
       - ./config.docker.toml:/app/config.toml:ro
       - ./cookie.txt:/app/cookie.txt:ro
-    command: ["--config", "/app/config.toml", "--no-banner"]
+    command: ["serve", "--config", "/app/config.toml", "--no-banner"]
 ```
 
 ```bash
@@ -193,7 +209,7 @@ After=network-online.target
 Type=simple
 User=podsync
 WorkingDirectory=/opt/podsync
-ExecStart=/opt/podsync/bin/podsync --config /opt/podsync/config.local-mysql.toml --no-banner
+ExecStart=/opt/podsync/bin/podsync serve --config /opt/podsync/config.local-mysql.toml --no-banner
 Restart=on-failure
 RestartSec=5
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
@@ -220,10 +236,10 @@ sudo systemctl stop podsync
 停止常驻实例后，执行一轮实际同步并退出：
 
 ```bash
-./bin/podsync --config config.local-mysql.toml --headless --no-banner
+./bin/podsync update -c config.local-mysql.toml --no-banner
 ```
 
-`--headless` 不启动 HTTP 服务，会更新所有配置的 feed，可能下载媒体并修改数据库。它会忽略常驻服务的 cron 等待时间。某个 feed 更新失败时程序只记录错误，不能只凭退出码判断同步成功。
+`update` 不启动 HTTP 服务，会更新所有配置的 feed，可能下载媒体并修改数据库。它会忽略常驻服务的 cron 等待时间。全部成功时退出码为 0；任一 feed 更新失败时记录错误并返回非零退出码。
 
 常驻 local 服务检查：
 

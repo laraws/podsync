@@ -141,6 +141,9 @@ Podsync supports the following environment variables for configuration and API k
 
 ## 🚀 How to run
 
+The CLI uses Cobra. Run `podsync serve` for the scheduled service, `podsync update` for a single update, or `podsync init-db` to initialize database tables. Use `--help`, `--version`, or `completion zsh` for help, version information, and shell completion. `--config` (`-c`), `--debug`, and `--no-banner` work before or after a subcommand.
+
+Running `podsync` without a subcommand shows help. Single updates return a nonzero exit code if any feed fails.
 
 ### Build and run as binary:
 
@@ -150,7 +153,7 @@ Make sure you have created the file `config.toml`. Also note the location of the
 $ git clone https://github.com/mxpv/podsync
 $ cd podsync
 $ make
-$ ./bin/podsync --config config.toml
+$ ./bin/podsync serve --config config.toml
 ```
 
 ### 🐛 How to debug

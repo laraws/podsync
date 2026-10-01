@@ -1,26 +1,43 @@
 package main
 
 import (
-	"github.com/jessevdk/go-flags"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 
 	"github.com/mxpv/podsync/pkg/db"
 )
 
 type initDBOpts struct {
-	ConfigPath string `long:"config" short:"c" default:"config.toml" env:"PODSYNC_CONFIG_PATH"`
-	Type       string `long:"type" description:"database type: sqlite or mysql (overrides config)"`
-	DSN        string `long:"dsn" description:"database DSN (overrides config)"`
+	ConfigPath string
+	Type       string
+	DSN        string
 }
 
-func runInitDB(args []string) error {
+func newInitDBCommand(configPath *string) *cobra.Command {
 	opts := initDBOpts{}
-	parser := flags.NewParser(&opts, flags.Default)
-	if _, err := parser.ParseArgs(args); err != nil {
-		return err
+	cmd := &cobra.Command{
+		Use:   "init-db",
+		Short: "Initialize database tables using configuration or a DSN",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			opts.ConfigPath = *configPath
+			return runInitDB(opts)
+		},
 	}
+	cmd.Flags().StringVar(&opts.Type, "type", "", "Database type: sqlite or mysql (overrides config)")
+	cmd.Flags().StringVar(&opts.DSN, "dsn", "", "Database DSN (requires --type; overrides config)")
+	cmd.MarkFlagsRequiredTogether("type", "dsn")
+	cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if (cmd.Flags().Changed("type") && opts.Type == "") || (cmd.Flags().Changed("dsn") && opts.DSN == "") {
+			return errors.New("--type and --dsn must be non-empty")
+		}
+		return nil
+	}
+	return cmd
+}
 
+func runInitDB(opts initDBOpts) error {
 	var cfg db.Config
 	if opts.Type != "" || opts.DSN != "" {
 		if opts.Type == "" || opts.DSN == "" {

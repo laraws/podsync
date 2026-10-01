@@ -29,7 +29,7 @@ url = "https://www.youtube.com/playlist?list=PLJicmE8fK0Egu9kfkc8Dz_H_yKONuMHvu"
 page_size = 1
 update_period = "1h"
 # 显式 cron_schedule 使启动时不立即更新，首次更新在约一小时后。
-# 需要立即更新时，停止服务后使用 --headless，或删除这一行再启动。
+# 需要立即更新时，停止服务后使用 podsync update，或删除这一行再启动。
 cron_schedule = "@every 1h"
 quality = "low"
 format = "audio"

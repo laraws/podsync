@@ -55,9 +55,9 @@ goimports -w .      # Organize imports and format
 
 ### Running
 ```bash
-./bin/podsync --config config.toml    # Run with config file
-./bin/podsync --debug                 # Run with debug logging
-./bin/podsync --headless              # Run once and exit (no web server)
+./bin/podsync serve --config config.toml # Run with config file
+./bin/podsync serve --debug           # Run with debug logging
+./bin/podsync update                  # Run once and exit (no web server)
 ```
 
 ### Database Migration

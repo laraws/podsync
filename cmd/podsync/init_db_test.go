@@ -16,7 +16,9 @@ func TestRunInitDB(t *testing.T) {
 	content := fmt.Sprintf("[database]\ntype = \"sqlite\"\ndsn = %q\n", databasePath)
 	require.NoError(t, os.WriteFile(configPath, []byte(content), 0600))
 
-	require.NoError(t, runInitDB([]string{"--config", configPath}))
+	cmd := newRootCommand(runService)
+	cmd.SetArgs([]string{"init-db", "--config", configPath})
+	require.NoError(t, cmd.Execute())
 	_, err := os.Stat(databasePath)
 	require.NoError(t, err)
 }

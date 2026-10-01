@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jessevdk/go-flags"
 	"github.com/mxpv/podsync/pkg/feed"
 	"github.com/mxpv/podsync/pkg/model"
 	"github.com/mxpv/podsync/services/update"
@@ -24,11 +24,11 @@ import (
 	"github.com/mxpv/podsync/pkg/ytdl"
 )
 
-type Opts struct {
-	ConfigPath string `long:"config" short:"c" default:"config.toml" env:"PODSYNC_CONFIG_PATH"`
-	Headless   bool   `long:"headless"`
-	Debug      bool   `long:"debug"`
-	NoBanner   bool   `long:"no-banner"`
+type serviceOptions struct {
+	ConfigPath string
+	RunOnce    bool
+	Debug      bool
+	NoBanner   bool
 }
 
 const banner = `
@@ -54,26 +54,17 @@ func main() {
 		TimestampFormat: time.RFC3339,
 		FullTimestamp:   true,
 	})
-	if len(os.Args) > 1 && os.Args[1] == "init-db" {
-		if err := runInitDB(os.Args[2:]); err != nil {
-			log.WithError(err).Fatal("failed to initialize database")
-		}
-		return
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := newRootCommand(runService).ExecuteContext(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
 	}
+}
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Parse args
-	opts := Opts{}
-	_, err := flags.Parse(&opts)
-	if err != nil {
-		log.WithError(err).Fatal("failed to parse command line arguments")
-	}
-
+func runService(ctx context.Context, opts serviceOptions) error {
+	previousOutput := log.StandardLogger().Out
+	defer log.SetOutput(previousOutput)
 	if opts.Debug {
 		log.SetLevel(log.DebugLevel)
 	}
@@ -93,13 +84,13 @@ func main() {
 	log.Debugf("loading configuration %q", opts.ConfigPath)
 	cfg, err := LoadConfig(opts.ConfigPath)
 	if err != nil {
-		log.WithError(err).Fatal("failed to load configuration file")
+		return fmt.Errorf("failed to load configuration file: %w", err)
 	}
 
 	if cfg.Log.Dir != "" {
 		writer, err := newDailyLogWriter(cfg.Log.Dir, time.Now)
 		if err != nil {
-			log.WithError(err).Fatal("failed to open daily log file")
+			return fmt.Errorf("failed to open daily log file: %w", err)
 		}
 		defer writer.Close()
 		log.SetOutput(writer)
@@ -124,12 +115,12 @@ func main() {
 
 	downloader, err := ytdl.New(ctx, cfg.Downloader)
 	if err != nil {
-		log.WithError(err).Fatal("youtube-dl error")
+		return fmt.Errorf("youtube-dl error: %w", err)
 	}
 
 	database, err := db.New(&cfg.Database)
 	if err != nil {
-		log.WithError(err).Fatal("failed to open database")
+		return fmt.Errorf("failed to open database: %w", err)
 	}
 	defer func() {
 		if err := database.Close(); err != nil {
@@ -151,10 +142,10 @@ func main() {
 		storage, err = fs.NewR2(cfg.Storage.R2)
 		publicURL = cfg.Storage.R2.PublicURL
 	default:
-		log.Fatalf("unknown storage type: %s", cfg.Storage.Type)
+		return fmt.Errorf("unknown storage type: %s", cfg.Storage.Type)
 	}
 	if err != nil {
-		log.WithError(err).Fatal("failed to open storage")
+		return fmt.Errorf("failed to open storage: %w", err)
 	}
 
 	// Run updater thread
@@ -163,7 +154,7 @@ func main() {
 	for name, list := range cfg.Tokens {
 		provider, err := feed.NewKeyProvider(list)
 		if err != nil {
-			log.WithError(err).Fatalf("failed to create key provider for %q", name)
+			return fmt.Errorf("failed to create key provider for %q: %w", name, err)
 		}
 		keys[name] = provider
 	}
@@ -171,17 +162,19 @@ func main() {
 	log.Debug("creating update manager")
 	manager, err := update.NewUpdater(cfg.Feeds, keys, publicURL, downloader, database, storage)
 	if err != nil {
-		log.WithError(err).Fatal("failed to create updater")
+		return fmt.Errorf("failed to create updater: %w", err)
 	}
 
-	// In Headless mode, do one round of feed updates and quit
-	if opts.Headless {
+	// The update command performs one round of feed updates and exits.
+	if opts.RunOnce {
+		var failures []error
 		for _, _feed := range cfg.Feeds {
 			if err := manager.Update(ctx, _feed); err != nil {
 				log.WithError(err).Errorf("failed to update feed: %s", _feed.URL)
+				failures = append(failures, fmt.Errorf("feed %s: %w", _feed.ID, err))
 			}
 		}
-		return
+		return errors.Join(failures...)
 	}
 
 	// Queue of feeds to update
@@ -189,12 +182,6 @@ func main() {
 	defer close(updates)
 
 	group, ctx := errgroup.WithContext(ctx)
-	defer func() {
-		if err := group.Wait(); err != nil && (err != context.Canceled && err != http.ErrServerClosed) {
-			log.WithError(err).Error("wait error")
-		}
-		log.Info("gracefully stopped")
-	}()
 
 	// Create Cron
 	c := cron.New(cron.WithChain(cron.SkipIfStillRunning(cron.DiscardLogger)))
@@ -232,7 +219,7 @@ func main() {
 				log.Debugf("adding %q to update queue", cronFeed.ID)
 				updates <- cronFeed
 			}); err != nil {
-				log.WithError(err).Fatalf("can't create cron task for feed: %s", cronFeed.ID)
+				return fmt.Errorf("can't create cron task for feed %s: %w", cronFeed.ID, err)
 			}
 
 			m[cronFeed.ID] = cronID
@@ -278,14 +265,9 @@ func main() {
 		log.Infof("%s content is hosted externally at %s", cfg.Storage.Type, publicURL)
 	}
 
-	// Keep both local and external-storage modes running until they are stopped.
-	group.Go(func() error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-stop:
-			cancel()
-			return nil
-		}
-	})
+	if err := group.Wait(); err != nil && err != context.Canceled && err != http.ErrServerClosed {
+		return err
+	}
+	log.Info("gracefully stopped")
+	return nil
 }

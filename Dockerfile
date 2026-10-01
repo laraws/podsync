@@ -60,4 +60,4 @@ COPY --from=builder /build/html/index.html /app/html/index.html
 
 ENTRYPOINT ["/app/podsync"]
 
-CMD ["--no-banner"]
+CMD ["serve", "--no-banner"]
