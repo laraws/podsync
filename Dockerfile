@@ -47,15 +47,12 @@ RUN mkdir -p /root/.config/yt-dlp && \
     > /root/.config/yt-dlp/config
 
 
-# yt-dlp compatibility alias
-RUN ln -sf /usr/local/bin/yt-dlp /usr/local/bin/youtube-dl
 
 
 RUN chmod 777 /usr/local/bin
 
 
 COPY --from=builder /build/bin/podsync /app/podsync
-COPY --from=builder /build/html/index.html /app/html/index.html
 
 
 ENTRYPOINT ["/app/podsync"]

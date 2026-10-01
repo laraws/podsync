@@ -25,22 +25,22 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 - **notify/**: Send-only Telegram SDK notifications for episode download results
 - **buildinfo/**: Shared build metadata for CLI version output and startup logs; injected by Makefile and GoReleaser
 
-Configuration defaults belong in `internal/config/defaults.go`. Domain enums stay in `pkg/model`; runtime constants and mutable state stay with the component that owns them. Keep application-specific packages under `internal`.
+Configuration defaults belong in `internal/config/defaults.go`. Domain enums stay in `internal/model`; runtime constants and mutable state stay with the component that owns them. Keep application-specific packages under `internal`.
 
-### Core Packages (`pkg/`)
-- **builder/**: Media downloaders for different platforms (YouTube, Vimeo, SoundCloud)
-- **feed/**: RSS/podcast feed generation and management, OPML export
-- **db/**: GORM-based SQL storage (SQLite/MySQL) for metadata and state
-- **fs/**: Storage abstraction supporting local filesystem and S3-compatible storage
-- **model/**: Core data structures and domain models
-- **ytdl/**: YouTube-dl wrapper for media downloading
-
-### Services (`services/`)
-- **update/**: Feed update orchestration and scheduling
-- **web/**: HTTP server for serving podcast feeds and media files
+### Core Internal Packages
+- **source/**: Platform metadata adapters and API credential rotation
+- **downloader/**: yt-dlp subprocesses; no unmanaged background goroutines
+- **feed/**: Pure RSS and OPML rendering
+- **db/**: Fresh SQLite/MySQL schemas, metadata sync and download-state persistence
+- **storage/**: Atomic local publication and S3/R2 writes; independent of HTTP
+- **model/**: Domain metadata and episode state, without configuration settings
+- **update/**: Synchronization, downloads, retention, and publication orchestration
+- **scheduler/**: Serial Cron worker with per-feed trigger coalescing
+- **web/**: HTTP serving, embedded UI, indexed health query
+- **hooks/**: Post-download commands with process cancellation
 
 ### Key Dependencies
-- youtube-dl/yt-dlp for media downloading
+- yt-dlp and ffmpeg for media downloading
 - GORM with SQLite/MySQL for database storage
 - Cobra for CLI commands and Viper/mapstructure for YAML configuration
 - robfig/cron for scheduling
@@ -58,7 +58,7 @@ make                # Build and run tests
 ```bash
 make test           # Run all unit tests
 go test -v ./...    # Run tests with verbose output
-go test ./pkg/...   # Test specific packages
+go test ./internal/...   # Test specific packages
 ```
 
 ### Linting and Formatting
@@ -76,7 +76,7 @@ go run . serve -c config.local-mysql.yaml # Run from the root entry point
 ./bin/podsync update                  # Run once and exit (no web server)
 ```
 
-### Database Migration
+### Database Initialization
 ```bash
 ./bin/podsync init-db --config config.yaml                 # Initialize using config file
 ./bin/podsync init-db --type sqlite --dsn /app/db/podsync.db  # Initialize SQLite directly
@@ -100,7 +100,7 @@ The application uses YAML configuration files. See `config.yaml.example` for all
 - `database`: Database configuration (SQLite or MySQL via GORM)
 - `tokens`: API keys for YouTube/Vimeo
 - `feeds`: Feed definitions with URLs and settings
-- `downloader`: youtube-dl configuration
+- `downloader`: yt-dlp configuration
 
 ## Development Guidelines
 

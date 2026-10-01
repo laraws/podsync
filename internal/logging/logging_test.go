@@ -29,8 +29,7 @@ func TestConfigureDailyOutputAndRestore(t *testing.T) {
 	log.SetFormatter(originalFormat)
 	log.SetLevel(log.DebugLevel)
 	dir := filepath.Join(t.TempDir(), "log")
-	ignoredFilename := filepath.Join(t.TempDir(), "ignored.log")
-	closeLogs, err := Configure(config.Log{Dir: dir, Filename: ignoredFilename, Debug: false})
+	closeLogs, err := Configure(config.Log{Dir: dir, Debug: false})
 	require.NoError(t, err)
 	assert.Equal(t, log.InfoLevel, log.GetLevel())
 	log.Debug("debug must be suppressed")
@@ -47,7 +46,6 @@ func TestConfigureDailyOutputAndRestore(t *testing.T) {
 	assert.Contains(t, string(data), "file message")
 	assert.NotContains(t, string(data), "debug must be suppressed")
 	assert.NotContains(t, string(data), "restored console")
-	assert.NoFileExists(t, ignoredFilename)
 }
 
 func TestConfigureFileAndConsole(t *testing.T) {
@@ -58,14 +56,14 @@ func TestConfigureFileAndConsole(t *testing.T) {
 			log.SetOutput(&console)
 			cfg := config.Log{Debug: true}
 			if fileOutput {
-				cfg.Filename = filepath.Join(t.TempDir(), "podsync.log")
+				cfg.Dir = t.TempDir()
 			}
 			closeLogs, err := Configure(cfg)
 			require.NoError(t, err)
 			log.Debug("configured debug message")
 			require.NoError(t, closeLogs())
 			if fileOutput {
-				data, err := os.ReadFile(cfg.Filename)
+				data, err := os.ReadFile(filepath.Join(cfg.Dir, time.Now().Format("2006-01-02")+".log"))
 				require.NoError(t, err)
 				assert.Contains(t, string(data), "configured debug message")
 				assert.Empty(t, console.String())

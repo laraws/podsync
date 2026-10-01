@@ -8,7 +8,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/mxpv/podsync/internal/config"
 )
@@ -37,14 +36,11 @@ func SetDebug(enabled bool) {
 func Configure(cfg config.Log) (func() error, error) {
 	var writer io.WriteCloser
 	var err error
-	switch {
-	case cfg.Dir != "":
+	if cfg.Dir != "" {
 		writer, err = newDailyLogWriter(cfg.Dir, time.Now)
 		if err != nil {
 			return nil, fmt.Errorf("open daily log output: %w", err)
 		}
-	case cfg.Filename != "":
-		writer = &lumberjack.Logger{Filename: cfg.Filename, MaxSize: cfg.MaxSize, MaxBackups: cfg.MaxBackups, MaxAge: cfg.MaxAge, Compress: cfg.Compress}
 	}
 	logger := log.StandardLogger()
 	previousOutput, previousLevel, previousFormatter := logger.Out, logger.GetLevel(), logger.Formatter
@@ -55,8 +51,6 @@ func Configure(cfg config.Log) (func() error, error) {
 	}
 	if cfg.Dir != "" {
 		log.Infof("using daily log directory: %s", cfg.Dir)
-	} else if cfg.Filename != "" {
-		log.Infof("using log file: %s", cfg.Filename)
 	}
 	var once sync.Once
 	var closeErr error

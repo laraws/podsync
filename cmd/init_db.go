@@ -1,7 +1,9 @@
 package cmd
 
 import (
-	"github.com/pkg/errors"
+	"context"
+	"errors"
+
 	"github.com/spf13/cobra"
 
 	"github.com/mxpv/podsync/internal/app"
@@ -23,7 +25,7 @@ func newInitDBCommand(reader *appconfig.Reader) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.ConfigPath = reader.Path()
-			return runInitDB(opts)
+			return runInitDB(cmd.Context(), opts)
 		},
 	}
 	cmd.Flags().StringVar(&opts.Type, "type", "", "Database type: sqlite or mysql (overrides config)")
@@ -40,7 +42,7 @@ func newInitDBCommand(reader *appconfig.Reader) *cobra.Command {
 	return cmd
 }
 
-func runInitDB(opts initDBOpts) error {
+func runInitDB(ctx context.Context, opts initDBOpts) error {
 	reader := opts.reader
 	if reader == nil {
 		reader = appconfig.NewReader()
@@ -66,5 +68,5 @@ func runInitDB(opts initDBOpts) error {
 		cfg = *loaded
 	}
 
-	return app.InitDatabase(cfg)
+	return app.InitDatabase(ctx, cfg)
 }

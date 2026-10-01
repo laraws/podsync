@@ -31,7 +31,7 @@ any device in podcast client.
 - One-click deployment for AWS.
 - Runs on Windows, Mac OS, Linux, and Docker.
 - Supports ARM.
-- Automatic yt-dlp self update.
+- Optional yt-dlp self update every 24 hours while serving (custom binaries are excluded).
 - Supports API keys rotation.
 
 ## 📋 Dependencies
@@ -70,25 +70,62 @@ In order to query YouTube or Vimeo API you have to obtain an API token first.
 ## Project structure
 
 ```text
-main.go             Process entry point, signal context and exit code
-cmd/                Cobra commands, flags and configuration resolution
-internal/app/       Service composition, database initialization and lifecycle
-internal/logging/   Logging setup, file ownership and daily rotation
-internal/config/    Configuration types, YAML loading, defaults and validation
-internal/notify/    Episode result notifications through Telegram
-internal/buildinfo/ Build metadata
-pkg/                Feed builders, models, database, storage and downloader
-services/           Feed update and HTTP serving logic
+main.go              Process entry point, signals and exit code
+cmd/                 Cobra commands, flags and configuration resolution
+internal/app/        Dependency composition, one-shot updates and service lifecycle
+internal/scheduler/  Cron scheduling, per-feed deduplication and cancellation
+internal/update/     Metadata sync, downloads, retention and publication
+internal/source/     YouTube/Vimeo/SoundCloud/Twitch adapters and API credentials
+internal/downloader/ yt-dlp subprocess adapter
+internal/feed/       Pure RSS/OPML rendering
+internal/storage/    Atomic local writes and S3/R2 object storage
+internal/db/         SQL metadata and download-state persistence
+internal/model/      Domain metadata and episode state
+internal/web/        HTTP file serving, embedded Web UI and health query
+internal/hooks/      Cancellable post-download commands
+internal/config/     YAML loading, defaults and startup validation
+internal/logging/    Console output or daily log files
+internal/notify/     Telegram episode notifications
+internal/buildinfo/  Build metadata
 ```
 
 The entry point is the repository root: `go run . serve -c config.local-mysql.yaml`. CLI adapters pass resolved configuration to the application; application-specific setup stays under `internal/`.
+
+## Update flow and database
+
+An update fetches source metadata, synchronizes it in one transaction, downloads
+eligible episodes newest first, applies retention, then publishes RSS and OPML.
+`page_size` caps fetched episodes and downloads per update; it does not cap the
+number retained over multiple updates. Download failures return a nonzero exit
+code while successful episodes are still published. Scheduled updates are serial;
+repeated triggers for a queued or running feed are coalesced.
+
+The database contains `feeds` (source metadata and creation/update timestamps)
+and `episodes` (metadata, numeric playlist order, download status, object key,
+size, attempt count, last attempt time, last error and download completion time).
+Metadata refreshes preserve download state. Foreign keys cascade feed deletion;
+indexes support feed iteration and the recent-failure health query. `/health`
+counts currently failed episodes by their last attempt time, independent of their
+publication date. Fresh SQLite/MySQL schemas are initialized on opening the database;
+there are no old-schema migrations or object-key backfills.
+
+Local writes publish files through a temporary file and rename. The Web UI is
+embedded in the binary. For S3/R2, `public_url` is the public directory URL before
+the storage `prefix`; RSS, OPML and hook URLs use the same object-key rules.
+Post-download hooks receive `EPISODE_FILE` (absolute path for local storage,
+empty for cloud), `EPISODE_KEY`, `EPISODE_URL`, `FEED_NAME`, and `EPISODE_TITLE`.
+`log.dir` enables daily log files; leaving it empty selects console output.
+
+Platform integration tests require explicit credentials. Normal unit tests use
+local HTTP fixtures or injected adapters; `go test -race ./...` covers the queue,
+update pipeline and storage recovery without downloading media or sending Telegram messages.
 
 ## ⚙️ Configuration
 
 You need to create a configuration file (for instance `config.yaml`) and specify the list of feeds that you're going to host.
 See [config.yaml.example](./config.yaml.example) for all possible configuration keys available in Podsync.
 
-Configuration is loaded through Viper. Precedence is explicit CLI flags, environment variables, YAML values, then defaults. Feed identifiers retain their original case. Only `.yaml` and `.yml` files are accepted; duplicate keys and multiple documents are rejected.
+Configuration is loaded through Viper. Precedence is explicit CLI flags, environment variables, YAML values, then defaults. Feed identifiers retain their original case. Only `.yaml` and `.yml` files are accepted; unknown fields, duplicate keys and multiple documents are rejected. Audio is the default format; select video or custom explicitly when needed.
 
 Minimal configuration would look like this:
 
@@ -151,7 +188,7 @@ Notifications use the [go-telegram/bot SDK](https://github.com/go-telegram/bot) 
 
 Podsync supports the following environment variables for configuration and API keys:
 
-Static configuration fields also support `PODSYNC_` environment variables with dots replaced by underscores, such as `PODSYNC_SERVER_PORT`, `PODSYNC_DATABASE_DSN`, and `PODSYNC_LOG_DIR`. Dynamic feed entries are configured in YAML. The named API key and R2 variables below take priority over their generic names where both are supported. Empty environment values override file values.
+Static configuration fields also support `PODSYNC_` environment variables with dots replaced by underscores, such as `PODSYNC_SERVER_PORT`, `PODSYNC_DATABASE_DSN`, and `PODSYNC_LOG_DIR`. Dynamic feed entries are configured in YAML. API keys and R2 fields use the documented names below; alternate names are not supported. Empty environment values override file values.
 
 | Variable Name                | Description                                                                               | Example Value(s)                              |
 |------------------------------|-------------------------------------------------------------------------------------------|-----------------------------------------------|

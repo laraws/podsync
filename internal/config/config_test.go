@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mxpv/podsync/pkg/model"
+	"github.com/mxpv/podsync/internal/model"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -152,7 +152,7 @@ storage:
 	assert.EqualValues(t, feed.PageSize, 50)
 	assert.EqualValues(t, feed.Quality, "high")
 	assert.EqualValues(t, feed.Custom.CoverArtQuality, "high")
-	assert.EqualValues(t, feed.Format, "video")
+	assert.EqualValues(t, feed.Format, "audio")
 }
 
 func TestLoadDatabaseConfigDoesNotRequireApplicationConfig(t *testing.T) {

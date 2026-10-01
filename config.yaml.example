@@ -68,7 +68,7 @@ feeds:
     page_size: 50
     update_period: "12h"
     quality: "high" # high or low
-    format: "video" # audio, video, or custom
+    format: "audio" # audio (default), video, or custom
     # Used when format: custom.
     custom_format:
       youtube_dl_format: "bestaudio[ext=m4a]"
@@ -140,12 +140,6 @@ log:
   # One append-only file per local calendar date: log/YYYY-MM-DD.log.
   dir: "log"
   debug: false
-  # Optional size-based rotation when dir is empty.
-  # filename: "podsync.log"
-  # max_size: 50 # MB
-  # max_age: 30 # days
-  # max_backups: 7
-  # compress: false
 
 # Send each episode's download result to a Telegram user via a send-only bot.
 # Environment overrides: PODSYNC_TELEGRAM_ENABLED, PODSYNC_TELEGRAM_BOT_TOKEN,

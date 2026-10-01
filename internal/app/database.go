@@ -1,17 +1,18 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mxpv/podsync/internal/config"
-	"github.com/mxpv/podsync/pkg/db"
+	"github.com/mxpv/podsync/internal/db"
 )
 
 // InitDatabase initializes the schema without starting any other service.
-func InitDatabase(cfg config.Database) error {
-	database, err := db.New(&cfg)
+func InitDatabase(ctx context.Context, cfg config.Database) error {
+	database, err := db.New(ctx, &cfg)
 	if err != nil {
 		return err
 	}

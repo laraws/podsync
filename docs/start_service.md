@@ -29,7 +29,7 @@ CLI 使用 Cobra。`serve` 常驻运行，`update` 同步一次后退出，`init
 
 ### 代码结构
 
-根目录 `main.go` 是统一入口，处理退出码和进程信号；`cmd/` 负责 Cobra 命令、参数和配置解析；`internal/app/` 负责服务组装、数据库初始化及启动/停止；`internal/logging/` 负责日志配置、文件关闭和每日轮转。配置、通知、构建信息分别位于 `internal/config`、`internal/notify`、`internal/buildinfo`。下载、存储和 feed 等核心逻辑仍在 `pkg/` 和 `services/`。
+根目录 `main.go` 是统一入口，处理退出码和进程信号；`cmd/` 负责 Cobra 命令、参数和配置解析；`internal/app/` 负责服务组装、数据库初始化及启动/停止；`internal/logging/` 负责日志配置、文件关闭和每日轮转。配置、通知、构建信息分别位于 `internal/config`、`internal/notify`、`internal/buildinfo`。核心逻辑统一位于 `internal`：`source` 获取平台元数据，`downloader` 调用 yt-dlp，`scheduler` 调度并去重，`update` 编排更新，`storage` 保存对象，`feed` 渲染 RSS/OPML，`db` 保存元数据与下载状态，`web` 提供 HTTP 服务。
 
 源码运行使用 `go run .`，Makefile、GoReleaser 和 VS Code 调试也统一指向根目录入口。容器通过 Makefile 构建同一个入口。
 
@@ -133,7 +133,7 @@ log:
   dir: "log"
 ```
 
-目录会自动创建，同一天重启追加到当天文件；跨天后的第一条日志自动写入新文件，例如 `log/2026-10-01.log`、`log/2026-10-02.log`。文件不会自动压缩或删除。`dir` 优先于旧的 `filename` 配置，每日模式不使用 `max_size`、`max_age`、`max_backups` 和 `compress`。
+目录会自动创建，同一天重启追加到当天文件；跨天后的第一条日志自动写入新文件，例如 `log/2026-10-01.log`、`log/2026-10-02.log`。文件不会自动压缩或删除。仅支持 `dir` 和 `debug` 两个日志配置项；不设置 `dir` 时输出到终端。
 
 ```bash
 tail -f "log/$(date +%F).log"
@@ -313,3 +313,6 @@ curl --fail --max-time 10 http://localhost:8080/podsync.opml
 如果需要完整的证书验证，应为 MySQL 配置受信任且身份匹配的证书，再使用 `tls=true`；私有 CA 场景可通过 `mysql.RegisterTLSConfig` 注册自定义 TLS 配置，目前应用没有提供专门的 CA 文件配置项。
 
 `server.tls` 控制 Podsync 的 HTTP/HTTPS；DSN 的 `tls` 控制 MySQL，二者独立。设置 `server.hostname` 只改变 RSS 等公开链接，不会开启 HTTP TLS。
+
+
+新版面向全新部署：数据库自动创建 `feeds` 和 `episodes` 两张表，不执行旧数据库迁移。音频是默认格式，现有配置字段名和文档中的环境变量名称保留。未知 YAML 字段会在启动时被拒绝。HTTP 页面已嵌入二进制，无需额外复制 `html/`。对象存储的 `public_url` 对应存储前缀之前的公开目录，`prefix` 会自动加入 RSS/OPML 链接。

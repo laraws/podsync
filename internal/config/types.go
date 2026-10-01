@@ -3,7 +3,7 @@ package config
 import (
 	"time"
 
-	"github.com/mxpv/podsync/pkg/model"
+	"github.com/mxpv/podsync/internal/model"
 )
 
 type Config struct {
@@ -20,7 +20,7 @@ type Config struct {
 	Feeds map[string]*Feed `mapstructure:"feeds"`
 	// Tokens is API keys to use to access YouTube/Vimeo APIs.
 	Tokens map[model.Provider][]string `mapstructure:"tokens"`
-	// Downloader (youtube-dl) configuration
+	// Downloader (yt-dlp) configuration
 	Downloader Downloader `mapstructure:"downloader"`
 	// Global cleanup policy applied to feeds that don't specify their own cleanup policy
 	Cleanup *Cleanup `mapstructure:"cleanup"`
@@ -36,22 +36,10 @@ type Telegram struct {
 	Timeout time.Duration `mapstructure:"timeout"`
 }
 
+// Log writes to the console, or daily files when Dir is set.
 type Log struct {
-	// Dir enables daily log files named YYYY-MM-DD.log, using local time.
-	// When set, it takes precedence over the legacy filename rotation settings.
-	Dir string `mapstructure:"dir"`
-	// Filename to write the log to (instead of stdout)
-	Filename string `mapstructure:"filename"`
-	// MaxSize is the maximum size of the log file in MB
-	MaxSize int `mapstructure:"max_size"`
-	// MaxBackups is the maximum number of log file backups to keep after rotation
-	MaxBackups int `mapstructure:"max_backups"`
-	// MaxAge is the maximum number of days to keep the logs for
-	MaxAge int `mapstructure:"max_age"`
-	// Compress old backups
-	Compress bool `mapstructure:"compress"`
-	// Debug mode
-	Debug bool `mapstructure:"debug"`
+	Dir   string `mapstructure:"dir"`
+	Debug bool   `mapstructure:"debug"`
 }
 
 type Feed struct {
@@ -83,8 +71,8 @@ type Feed struct {
 	Clean *Cleanup `mapstructure:"clean"`
 	// Custom is a list of feed customizations
 	Custom Custom `mapstructure:"custom"`
-	// List of additional youtube-dl arguments passed at download time
-	YouTubeDLArgs []string `mapstructure:"youtube_dl_args"`
+	// List of additional yt-dlp arguments passed at download time
+	DownloadArgs []string `mapstructure:"youtube_dl_args"`
 	// Post episode download hooks - executed after each episode is successfully downloaded
 	// Multiple hooks can be configured and will execute in sequence
 	PostEpisodeDownload []*Hook `mapstructure:"post_episode_download"`
@@ -97,8 +85,8 @@ type Feed struct {
 }
 
 type CustomFormat struct {
-	YouTubeDLFormat string `mapstructure:"youtube_dl_format"`
-	Extension       string `mapstructure:"extension"`
+	Selector  string `mapstructure:"youtube_dl_format"`
+	Extension string `mapstructure:"extension"`
 }
 
 type Filters struct {
@@ -188,9 +176,9 @@ type S3Storage struct {
 type Downloader struct {
 	// SelfUpdate toggles self update every 24 hour
 	SelfUpdate bool `mapstructure:"self_update"`
-	// Timeout in minutes for youtube-dl process to finish download
+	// Timeout in minutes for yt-dlp process to finish download
 	Timeout int `mapstructure:"timeout"`
-	// CustomBinary is a custom path to youtube-dl, this allows using various youtube-dl forks.
+	// CustomBinary is a custom path to yt-dlp, this allows using various yt-dlp forks.
 	CustomBinary string `mapstructure:"custom_binary"`
 }
 
@@ -219,3 +207,15 @@ type Server struct {
 
 // R2Storage uses the S3 API with R2-specific defaults.
 type R2Storage S3Storage
+
+// EpisodeExtension is shared by the downloader and storage naming policy.
+func (f *Feed) EpisodeExtension() string {
+	switch f.Format {
+	case model.FormatAudio:
+		return "mp3"
+	case model.FormatCustom:
+		return f.CustomFormat.Extension
+	default:
+		return "mp4"
+	}
+}

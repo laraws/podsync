@@ -68,8 +68,8 @@ feeds:
 	assert.Equal(t, 720, f.MaxHeight)
 	assert.True(t, f.PrivateFeed)
 	assert.True(t, f.OPML)
-	assert.Equal(t, []string{"--match-filter", "duration < 600"}, f.YouTubeDLArgs)
-	assert.Equal(t, "bestaudio", f.CustomFormat.YouTubeDLFormat)
+	assert.Equal(t, []string{"--match-filter", "duration < 600"}, f.DownloadArgs)
+	assert.Equal(t, "bestaudio", f.CustomFormat.Selector)
 	assert.Equal(t, "skip", f.Filters.NotTitle)
 	assert.EqualValues(t, 10, f.Filters.MinDuration)
 	assert.Equal(t, 30, f.Filters.MaxAge)
@@ -208,4 +208,19 @@ func TestTelegramValidation(t *testing.T) {
 	cfg, err := LoadConfig(writeConfig(t, base+"telegram:\n  enabled: true\n  bot_token: test-key\n  user_id: 1\n"))
 	require.NoError(t, err)
 	assert.Equal(t, DefaultTelegramTimeout, cfg.Telegram.Timeout)
+}
+
+func TestStartupRejectsInvalidPolicyAndRemovedOptions(t *testing.T) {
+	base := "storage:\n  local:\n    data_dir: ./data\nfeeds:\n  f:\n    url: https://youtube.com/channel/test\n"
+	for _, extra := range []string{
+		"    page_size: -1\n", "    quality: unknown\n", "    format: invalid\n", "    update_period: -1s\n", "    cron_schedule: invalid\n", "    filters:\n      title: '['\n", "    clean:\n      keep_last: -1\n", "    format: custom\n    custom_format:\n      youtube_dl_format: bestaudio\n      extension: '../mp3'\n",
+	} {
+		_, err := LoadConfig(writeConfig(t, base+extra))
+		require.Error(t, err, extra)
+	}
+	_, err := LoadConfig(writeConfig(t, base+"log:\n  filename: old.log\n"))
+	require.ErrorContains(t, err, "filename")
+	cfg, err := LoadConfig(writeConfig(t, base))
+	require.NoError(t, err)
+	assert.EqualValues(t, "audio", cfg.Feeds["f"].Format)
 }

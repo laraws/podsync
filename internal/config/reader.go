@@ -35,10 +35,13 @@ func NewReader() *Reader {
 	v.SetDefault("storage.type", "local")
 	v.SetDefault("database.type", "sqlite")
 
-	// Named API/R2 variables remain the documented deployment interface.
+	_ = v.BindEnv("config", "PODSYNC_CONFIG_PATH")
+	_ = v.BindEnv("no-banner", "PODSYNC_NO_BANNER")
+	// Bind known struct fields explicitly so environment-only values are also
+	// included by Viper.Unmarshal. Dynamic feed maps keep their file settings.
+	bindStructEnv(v, "", reflect.TypeOf(Config{}))
+	// These are the documented primary environment names, without fallback aliases.
 	for key, name := range map[string]string{
-		"config":                       "PODSYNC_CONFIG_PATH",
-		"no-banner":                    "PODSYNC_NO_BANNER",
 		"tokens.youtube":               "PODSYNC_YOUTUBE_API_KEY",
 		"tokens.vimeo":                 "PODSYNC_VIMEO_API_KEY",
 		"tokens.soundcloud":            "PODSYNC_SOUNDCLOUD_API_KEY",
@@ -51,9 +54,7 @@ func NewReader() *Reader {
 	} {
 		_ = v.BindEnv(key, name)
 	}
-	// Bind known struct fields explicitly so environment-only values are also
-	// included by Viper.Unmarshal. Dynamic feed maps keep their file settings.
-	bindStructEnv(v, "", reflect.TypeOf(Config{}))
+
 	return &Reader{v: v, codec: codec}
 }
 
@@ -102,10 +103,15 @@ func (r *Reader) Load(path string) (*Config, error) {
 	if err := r.read(path); err != nil {
 		return nil, err
 	}
-	var config Config
-	if err := r.v.Unmarshal(&config, configDecodeHook()); err != nil {
+	var resolved struct {
+		Config   `mapstructure:",squash"`
+		Path     string `mapstructure:"config"`
+		NoBanner bool   `mapstructure:"no-banner"`
+	}
+	if err := r.v.UnmarshalExact(&resolved, configDecodeHook()); err != nil {
 		return nil, fmt.Errorf("decode configuration: %w", err)
 	}
+	config := resolved.Config
 	feeds := make(map[string]*Feed, len(config.Feeds))
 	for key, f := range config.Feeds {
 		id := r.codec.feedIDs[key]
