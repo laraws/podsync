@@ -19,7 +19,7 @@ func writeConfig(t *testing.T, content string) string {
 	return p
 }
 
-func TestViperFlagEnvironmentFilePrecedence(t *testing.T) {
+func TestCLIConfigPrecedence(t *testing.T) {
 	previousLevel := log.GetLevel()
 	t.Cleanup(func() { log.SetLevel(previousLevel) })
 	for _, test := range []struct {
