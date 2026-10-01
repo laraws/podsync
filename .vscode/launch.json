@@ -7,7 +7,7 @@
             "type": "go",
             "request": "launch",
             "mode": "debug",
-            "program": "${workspaceFolder}/cmd/podsync",
+            "program": "${workspaceFolder}",
             "cwd": "${workspaceFolder}",
             "args": ["serve", "--config", "config.yaml"]
         }

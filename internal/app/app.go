@@ -1,22 +1,20 @@
-package main
+// Package app composes storage, downloading, notifications and service lifecycle.
+package app
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/mxpv/podsync/internal/buildinfo"
-	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/logging"
 	"github.com/mxpv/podsync/internal/notify"
 	"github.com/mxpv/podsync/pkg/db"
 	"github.com/mxpv/podsync/pkg/feed"
@@ -27,92 +25,32 @@ import (
 	"github.com/mxpv/podsync/services/web"
 )
 
-type serviceOptions struct {
-	ConfigPath string
-	RunOnce    bool
-	Debug      bool
-	NoBanner   bool
-	reader     *appconfig.Reader
+// Options selects the service lifecycle after configuration is resolved.
+type Options struct {
+	RunOnce  bool
+	NoBanner bool
 }
 
-const banner = `
- _______  _______  ______   _______           _        _______ 
-(  ____ )(  ___  )(  __  \ (  ____ \|\     /|( (    /|(  ____ \
-| (    )|| (   ) || (  \  )| (    \/( \   / )|  \  ( || (    \/
-| (____)|| |   | || |   ) || (_____  \ (_) / |   \ | || |      
-|  _____)| |   | || |   | |(_____  )  \   /  | (\ \) || |      
-| (      | |   | || |   ) |      ) |   ) (   | | \   || |      
-| )      | (___) || (__/  )/\____) |   | |   | )  \  || (____/\
-|/       (_______)(______/ \_______)   \_/   |/    )_)(_______/
-`
-
-func main() {
-	log.SetFormatter(&log.TextFormatter{
-		TimestampFormat: time.RFC3339,
-		FullTimestamp:   true,
-	})
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-	if err := newRootCommand(runService).ExecuteContext(ctx); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
+// Run executes one update round or runs the scheduler and HTTP server.
+func Run(ctx context.Context, cfg *config.Config, opts Options) error {
+	closeLogs, err := logging.Configure(cfg.Log)
+	if err != nil {
+		return fmt.Errorf("configure logging: %w", err)
 	}
-}
-
-func runService(ctx context.Context, opts serviceOptions) error {
-	previousOutput := log.StandardLogger().Out
-	defer log.SetOutput(previousOutput)
-	if opts.Debug {
-		log.SetLevel(log.DebugLevel)
-	}
-
+	defer func() {
+		if err := closeLogs(); err != nil {
+			log.WithError(err).Error("failed to close log output")
+		}
+	}()
 	if !opts.NoBanner {
 		log.Info(banner)
 	}
-
 	log.WithFields(log.Fields{
 		"version": buildinfo.DisplayVersion(),
 		"commit":  buildinfo.Commit,
 		"date":    buildinfo.Date,
 		"arch":    buildinfo.Arch,
 	}).Info("running podsync")
-
-	// Load YAML file
-	log.Debugf("loading configuration %q", opts.ConfigPath)
-	reader := opts.reader
-	if reader == nil {
-		reader = appconfig.NewReader()
-	}
-	cfg, err := reader.Load(opts.ConfigPath)
-	if err != nil {
-		return fmt.Errorf("failed to load configuration file: %w", err)
-	}
-
-	if cfg.Log.Dir != "" {
-		writer, err := newDailyLogWriter(cfg.Log.Dir, time.Now)
-		if err != nil {
-			return fmt.Errorf("failed to open daily log file: %w", err)
-		}
-		defer writer.Close()
-		log.SetOutput(writer)
-		log.Infof("using daily log directory: %s", cfg.Log.Dir)
-	} else if cfg.Log.Filename != "" {
-		log.Infof("Using log file: %s", cfg.Log.Filename)
-
-		writer := &lumberjack.Logger{
-			Filename:   cfg.Log.Filename,
-			MaxSize:    cfg.Log.MaxSize,
-			MaxBackups: cfg.Log.MaxBackups,
-			MaxAge:     cfg.Log.MaxAge,
-			Compress:   cfg.Log.Compress,
-		}
-		defer writer.Close()
-		log.SetOutput(writer)
-	}
-
-	if cfg.Log.Debug {
-		log.SetLevel(log.DebugLevel)
-	}
 
 	downloader, err := ytdl.New(ctx, cfg.Downloader)
 	if err != nil {
@@ -188,7 +126,7 @@ func runService(ctx context.Context, opts serviceOptions) error {
 	}
 
 	// Queue of feeds to update
-	updates := make(chan *appconfig.Feed, 16)
+	updates := make(chan *config.Feed, 16)
 	defer close(updates)
 
 	group, ctx := errgroup.WithContext(ctx)

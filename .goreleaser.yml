@@ -5,7 +5,7 @@ before:
     - go mod tidy
 
 builds:
-  - main: ./cmd/podsync/
+  - main: .
     binary: podsync
     ldflags:
       - -s -w

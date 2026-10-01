@@ -67,6 +67,22 @@ In order to query YouTube or Vimeo API you have to obtain an API token first.
 - [How to get YouTube API key](https://elfsight.com/blog/2016/12/how-to-get-youtube-api-key-tutorial/)
 - [Generate an access token for Vimeo](https://developer.vimeo.com/api/guides/start#generate-access-token)
 
+## Project structure
+
+```text
+main.go             Process entry point, signal context and exit code
+cmd/                Cobra commands, flags and configuration resolution
+internal/app/       Service composition, database initialization and lifecycle
+internal/logging/   Logging setup, file ownership and daily rotation
+internal/config/    Configuration types, YAML loading, defaults and validation
+internal/notify/    Episode result notifications through Telegram
+internal/buildinfo/ Build metadata
+pkg/                Feed builders, models, database, storage and downloader
+services/           Feed update and HTTP serving logic
+```
+
+The entry point is the repository root: `go run . serve -c config.local-mysql.yaml`. CLI adapters pass resolved configuration to the application; application-specific setup stays under `internal/`.
+
 ## ⚙️ Configuration
 
 You need to create a configuration file (for instance `config.yaml`) and specify the list of feeds that you're going to host.

@@ -27,7 +27,7 @@ LDFLAGS := "-s -w -X 'github.com/mxpv/podsync/internal/buildinfo.Version=${TAG}'
 
 .PHONY: build
 build:
-	go build -trimpath -tags netgo -ldflags ${LDFLAGS} -o bin/podsync ./cmd/podsync
+	go build -trimpath -tags netgo -ldflags ${LDFLAGS} -o bin/podsync .
 
 # Build a local Docker image
 # Example:

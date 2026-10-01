@@ -8,16 +8,24 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 
 ## Key Architecture Components
 
-### Main Application (`cmd/podsync/`)
-- **main.go**: Entry point with CLI argument parsing, signal handling, and service orchestration
-- **cli.go**: Cobra commands and flags bound to one configuration reader
+### Entry Point (`main.go`)
+- Creates the process signal context, initializes console logging, executes the CLI, and controls the exit code.
+- Application errors return through CLI to this entry point; packages do not exit the process.
+
+### CLI (`cmd/`)
+- **root.go**: Cobra root command, shared flags, command registration, and context execution
+- **service.go**: `serve`/`update` command adapters; resolves Viper configuration and invokes the application
+- **init_db.go**: Database command flags and database-only configuration resolution
+- Construct a new command/configuration reader for each invocation; avoid global Cobra command state.
 
 ### Internal Packages (`internal/`)
+- **app/**: Application composition, database initialization, feed update lifecycle, scheduling and shutdown
+- **logging/**: Console/file logging setup and cleanup; daily log rotation without background polling
 - **config/**: Central configuration types, YAML/Viper loading, environment bindings, defaults, and validation
 - **notify/**: Send-only Telegram SDK notifications for episode download results
 - **buildinfo/**: Shared build metadata for CLI version output and startup logs; injected by Makefile and GoReleaser
 
-Configuration defaults belong in `internal/config/defaults.go`. Domain enums stay in `pkg/model`; runtime constants and mutable state stay with the component that owns them.
+Configuration defaults belong in `internal/config/defaults.go`. Domain enums stay in `pkg/model`; runtime constants and mutable state stay with the component that owns them. Keep application-specific packages under `internal`.
 
 ### Core Packages (`pkg/`)
 - **builder/**: Media downloaders for different platforms (YouTube, Vimeo, SoundCloud)
@@ -62,6 +70,7 @@ goimports -w .      # Organize imports and format
 
 ### Running
 ```bash
+go run . serve -c config.local-mysql.yaml # Run from the root entry point
 ./bin/podsync serve --config config.yaml # Run with config file
 ./bin/podsync serve --debug           # Run with debug logging
 ./bin/podsync update                  # Run once and exit (no web server)

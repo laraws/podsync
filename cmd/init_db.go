@@ -1,12 +1,11 @@
-package main
+package cmd
 
 import (
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/mxpv/podsync/internal/app"
 	appconfig "github.com/mxpv/podsync/internal/config"
-	"github.com/mxpv/podsync/pkg/db"
 )
 
 type initDBOpts struct {
@@ -67,13 +66,5 @@ func runInitDB(opts initDBOpts) error {
 		cfg = *loaded
 	}
 
-	database, err := db.New(&cfg)
-	if err != nil {
-		return err
-	}
-	if err := database.Close(); err != nil {
-		return errors.Wrap(err, "failed to close database")
-	}
-	log.WithField("type", cfg.Type).Info("database schema initialized")
-	return nil
+	return app.InitDatabase(cfg)
 }

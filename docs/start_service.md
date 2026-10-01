@@ -4,7 +4,7 @@
 
 | 方式 | 适用场景 | 启动命令 |
 | --- | --- | --- |
-| 源码运行 | 本地开发 | `go run ./cmd/podsync serve -c config.local-mysql.yaml` |
+| 源码运行 | 本地开发 | `go run . serve -c config.local-mysql.yaml` |
 | 编译后二进制 | 本地运行或服务器部署 | `make build` 后执行 `./bin/podsync serve -c config.local-mysql.yaml` |
 | Docker | 独立容器 | 构建本仓库镜像，再挂载配置和数据目录 |
 | Docker Compose | 后台运行、自动重启 | `docker compose up -d --build` |
@@ -26,6 +26,12 @@ CLI 使用 Cobra。`serve` 常驻运行，`update` 同步一次后退出，`init
 ```bash
 ./bin/podsync completion zsh > /tmp/_podsync
 ```
+
+### 代码结构
+
+根目录 `main.go` 是统一入口，处理退出码和进程信号；`cmd/` 负责 Cobra 命令、参数和配置解析；`internal/app/` 负责服务组装、数据库初始化及启动/停止；`internal/logging/` 负责日志配置、文件关闭和每日轮转。配置、通知、构建信息分别位于 `internal/config`、`internal/notify`、`internal/buildinfo`。下载、存储和 feed 等核心逻辑仍在 `pkg/` 和 `services/`。
+
+源码运行使用 `go run .`，Makefile、GoReleaser 和 VS Code 调试也统一指向根目录入口。容器通过 Makefile 构建同一个入口。
 
 ## 1. 选择配置
 
@@ -115,7 +121,7 @@ deno --version
 
 ```bash
 mkdir -p data
-go run ./cmd/podsync serve -c config.local-mysql.yaml --no-banner
+go run . serve -c config.local-mysql.yaml --no-banner
 ```
 
 前台运行按 `Ctrl+C` 停止。需要排查问题时添加 `--debug`。

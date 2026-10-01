@@ -1,16 +1,16 @@
-package main
+package cmd
 
 import (
 	"context"
 
-	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/mxpv/podsync/internal/buildinfo"
 	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/logging"
 )
 
-func newRootCommand(run func(context.Context, serviceOptions) error) *cobra.Command {
+func newRootCommand(run serviceRunner) *cobra.Command {
 	reader := appconfig.NewReader()
 	options := func() serviceOptions {
 		return serviceOptions{
@@ -40,29 +40,17 @@ func newRootCommand(run func(context.Context, serviceOptions) error) *cobra.Comm
 	_ = reader.BindFlag("log.debug", cmd.PersistentFlags().Lookup("debug"))
 	_ = reader.BindFlag("no-banner", cmd.PersistentFlags().Lookup("no-banner"))
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if reader.Debug() {
-			log.SetLevel(log.DebugLevel)
-		}
+		logging.SetDebug(reader.Debug())
 	}
-	cmd.AddCommand(&cobra.Command{
-		Use:   "serve",
-		Short: "Run the feed scheduler and HTTP server for local storage",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), options())
-		},
-	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "update",
-		Short: "Update all configured feeds once and exit",
-		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			updateOpts := options()
-			updateOpts.RunOnce = true
-			return run(cmd.Context(), updateOpts)
-		},
-	})
+	cmd.AddCommand(newServeCommand(run, options))
+	cmd.AddCommand(newUpdateCommand(run, options))
 	cmd.AddCommand(newInitDBCommand(reader))
 	cmd.MarkPersistentFlagFilename("config", "yaml", "yml")
 	return cmd
 }
+
+// ExecuteContext runs the CLI with process cancellation supplied by main.
+func ExecuteContext(ctx context.Context) error { return NewRootCommand().ExecuteContext(ctx) }
+
+// NewRootCommand creates a fresh command and configuration reader per invocation.
+func NewRootCommand() *cobra.Command { return newRootCommand(runService) }
