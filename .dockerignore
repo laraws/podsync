@@ -2,3 +2,10 @@
 node_modules/
 vendor/
 bin/
+config.toml
+config.local-mysql.toml
+config.docker.toml
+cookie.txt
+data/
+db/
+podsync.log

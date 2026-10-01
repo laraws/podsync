@@ -46,6 +46,7 @@ brew install yt-dlp ffmpeg go
 
 ## 📖 Documentation
 
+- [服务启动说明（中文）：源码、二进制、Docker、Compose、systemd](./docs/start_service.md)
 - [How to get Vimeo API token](./docs/how_to_get_vimeo_token.md)
 - [How to get YouTube API Key](./docs/how_to_get_youtube_api_key.md)
 - [Podsync on QNAP NAS Guide](./docs/how_to_setup_podsync_on_qnap_nas.md)
@@ -127,7 +128,7 @@ Podsync supports the following environment variables for configuration and API k
 
 | Variable Name                | Description                                                                               | Example Value(s)                              |
 |------------------------------|-------------------------------------------------------------------------------------------|-----------------------------------------------|
-| `PODSYNC_CONFIG_PATH`        | Path to the configuration file (overrides `--config` CLI flag)                            | `/app/config.toml`                            |
+| `PODSYNC_CONFIG_PATH`        | Default configuration file path when `--config` is not specified                         | `/app/config.toml`                            |
 | `PODSYNC_YOUTUBE_API_KEY`    | YouTube API key(s), space-separated for rotation                                          | `key1` or `key1 key2 key3` |
 | `PODSYNC_VIMEO_API_KEY`      | Vimeo API key(s), space-separated for rotation                                            | `key1` or `key1 key2`        |
 | `PODSYNC_SOUNDCLOUD_API_KEY` | SoundCloud API key(s), space-separated for rotation                                       | `soundcloud_key1 soundcloud_key2`             |

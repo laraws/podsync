@@ -41,6 +41,8 @@ podsync.log
 *.db-shm
 
 config.toml
+config.local-mysql.toml
+config.docker.toml
 
 .claude/settings.local.json
 .codebuddy/

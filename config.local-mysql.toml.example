@@ -1,0 +1,45 @@
+# 本地文件存储 + 远程 MySQL。复制为 config.local-mysql.toml 后填写凭据。
+# 从项目根目录启动，相对路径以进程工作目录为准。
+[server]
+port = 8080
+bind_address = "127.0.0.1"
+hostname = "http://localhost:8080"
+web_ui = true
+tls = false # 这是 HTTP 服务的 TLS 开关，与 MySQL TLS 无关。
+
+[storage]
+type = "local"
+
+[storage.local]
+data_dir = "./data"
+
+[database]
+type = "mysql"
+# skip-verify 强制加密，但不校验服务端证书；当前服务器使用自动生成的证书。
+# 密码中的 @、: 等字符可直接放在 MySQL DSN 的密码部分，不需要 URL 编码。
+dsn = "root:REPLACE_WITH_DB_PASSWORD@tcp(175.178.51.216:3306)/podsync-dev?charset=utf8mb4&parseTime=true&tls=skip-verify&timeout=5s&readTimeout=10s&writeTimeout=10s"
+max_open_conns = 2
+max_idle_conns = 1
+
+[tokens]
+youtube = "REPLACE_WITH_YOUTUBE_API_KEY"
+
+[feeds.PK1]
+url = "https://www.youtube.com/playlist?list=PLJicmE8fK0Egu9kfkc8Dz_H_yKONuMHvu"
+page_size = 1
+update_period = "1h"
+# 显式 cron_schedule 使启动时不立即更新，首次更新在约一小时后。
+# 需要立即更新时，停止服务后使用 --headless，或删除这一行再启动。
+cron_schedule = "@every 1h"
+quality = "low"
+format = "audio"
+opml = true
+youtube_dl_args = ["--match-filter", "!is_live", "--cookies", "cookie.txt"]
+# 不配置 clean，避免验证阶段清理已有节目；page_size 不是总下载数上限。
+
+[downloader]
+custom_binary = "yt-dlp"
+self_update = false
+timeout = 10
+
+# 不设置 [log].filename，日志输出到终端，方便排查。
