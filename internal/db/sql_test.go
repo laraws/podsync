@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -15,10 +16,33 @@ import (
 
 func newTestSQL(t *testing.T) *SQL {
 	t.Helper()
+	if dsn := os.Getenv("PODSYNC_TEST_MYSQL_DSN"); dsn != "" {
+		return newMySQLTestSQL(t, dsn)
+	}
 	database, err := New(context.Background(), &config.Database{Type: "sqlite", DSN: filepath.Join(t.TempDir(), "test.db")})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, database.Close()) })
 	return database
+}
+
+func TestDatabaseSchemaConstraints(t *testing.T) {
+	database := newTestSQL(t)
+	ctx := context.Background()
+	for _, id := range []string{"Case", "case"} {
+		require.NoError(t, database.SyncFeed(ctx, id, &model.Feed{Title: "音频 🎧", Episodes: []*model.Episode{{ID: "Case"}, {ID: "case"}}}))
+		feed, err := database.GetFeed(ctx, id)
+		require.NoError(t, err)
+		require.Len(t, feed.Episodes, 2)
+		require.Equal(t, "音频 🎧", feed.Title)
+		require.True(t, feed.PubDate.IsZero())
+	}
+	require.Error(t, database.UpdateEpisode(ctx, "Case", "Case", func(e *model.Episode) error {
+		e.Status = "invalid"
+		return nil
+	}))
+	episode, err := database.GetEpisode(ctx, "Case", "Case")
+	require.NoError(t, err)
+	require.Equal(t, model.EpisodeNew, episode.Status)
 }
 func TestSyncPreservesDownloadStateAndRefreshesMetadata(t *testing.T) {
 	ctx := context.Background()

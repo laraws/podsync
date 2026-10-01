@@ -120,6 +120,11 @@ Platform integration tests require explicit credentials. Normal unit tests use
 local HTTP fixtures or injected adapters; `go test -race ./...` covers the queue,
 update pipeline and storage recovery without downloading media or sending Telegram messages.
 
+To run the database tests against a local MySQL server, set `PODSYNC_TEST_MYSQL_DSN`
+and run `go test -race -count=1 ./internal/db`. Each test creates and drops its own
+temporary database, ignoring the database name in the DSN; the test user needs
+permission to create and drop databases. With Colima, start Docker using `colima start`.
+
 ## ⚙️ Configuration
 
 You need to create a configuration file (for instance `config.yaml`) and specify the list of feeds that you're going to host.
