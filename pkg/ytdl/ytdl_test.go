@@ -3,17 +3,17 @@ package ytdl
 import (
 	"testing"
 
-	"github.com/mxpv/podsync/pkg/feed"
-	"github.com/mxpv/podsync/pkg/model"
-
 	"github.com/stretchr/testify/assert"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/pkg/model"
 )
 
 func TestBuildArgs(t *testing.T) {
 	tests := []struct {
 		name         string
 		format       model.Format
-		customFormat feed.CustomFormat
+		customFormat appconfig.CustomFormat
 		quality      model.Quality
 		maxHeight    int
 		output       string
@@ -105,7 +105,7 @@ func TestBuildArgs(t *testing.T) {
 		{
 			name:         "Custom format",
 			format:       model.FormatCustom,
-			customFormat: feed.CustomFormat{YouTubeDLFormat: "bestaudio[ext=m4a]", Extension: "m4a"},
+			customFormat: appconfig.CustomFormat{YouTubeDLFormat: "bestaudio[ext=m4a]", Extension: "m4a"},
 			quality:      model.QualityHigh,
 			output:       "/tmp/2",
 			videoURL:     "http://url1",
@@ -115,7 +115,7 @@ func TestBuildArgs(t *testing.T) {
 
 	for _, tst := range tests {
 		t.Run(tst.name, func(t *testing.T) {
-			result := buildArgs(&feed.Config{
+			result := buildArgs(&appconfig.Feed{
 				Format:        tst.format,
 				Quality:       tst.quality,
 				CustomFormat:  tst.customFormat,

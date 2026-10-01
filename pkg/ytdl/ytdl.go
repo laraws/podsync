@@ -13,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mxpv/podsync/pkg/feed"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/model"
 )
 
@@ -48,23 +48,13 @@ var (
 	ErrTooManyRequests = errors.New(http.StatusText(http.StatusTooManyRequests))
 )
 
-// Config is a youtube-dl related configuration
-type Config struct {
-	// SelfUpdate toggles self update every 24 hour
-	SelfUpdate bool `mapstructure:"self_update"`
-	// Timeout in minutes for youtube-dl process to finish download
-	Timeout int `mapstructure:"timeout"`
-	// CustomBinary is a custom path to youtube-dl, this allows using various youtube-dl forks.
-	CustomBinary string `mapstructure:"custom_binary"`
-}
-
 type YoutubeDl struct {
 	path       string
 	timeout    time.Duration
 	updateLock sync.Mutex // Don't call youtube-dl while self updating
 }
 
-func New(ctx context.Context, cfg Config) (*YoutubeDl, error) {
+func New(ctx context.Context, cfg appconfig.Downloader) (*YoutubeDl, error) {
 	var (
 		path string
 		err  error
@@ -205,7 +195,7 @@ func (dl *YoutubeDl) PlaylistMetadata(ctx context.Context, url string) (metadata
 	return playlistMetadata, nil
 }
 
-func (dl *YoutubeDl) Download(ctx context.Context, feedConfig *feed.Config, episode *model.Episode) (r io.ReadCloser, err error) {
+func (dl *YoutubeDl) Download(ctx context.Context, feedConfig *appconfig.Feed, episode *model.Episode) (r io.ReadCloser, err error) {
 	tmpDir, err := os.MkdirTemp("", "podsync-")
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get temp dir for download")
@@ -273,7 +263,7 @@ func (dl *YoutubeDl) exec(ctx context.Context, args ...string) (string, error) {
 	return string(output), nil
 }
 
-func buildArgs(feedConfig *feed.Config, episode *model.Episode, outputFilePath string) []string {
+func buildArgs(feedConfig *appconfig.Feed, episode *model.Episode, outputFilePath string) []string {
 	var args []string
 
 	switch feedConfig.Format {

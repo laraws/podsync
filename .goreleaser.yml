@@ -7,6 +7,12 @@ before:
 builds:
   - main: ./cmd/podsync/
     binary: podsync
+    ldflags:
+      - -s -w
+      - -X github.com/mxpv/podsync/internal/buildinfo.Version={{ .Version }}
+      - -X github.com/mxpv/podsync/internal/buildinfo.Commit={{ .Commit }}
+      - -X github.com/mxpv/podsync/internal/buildinfo.Date={{ .Date }}
+      - -X github.com/mxpv/podsync/internal/buildinfo.Arch={{ .Arch }}
     env:
       - CGO_ENABLED=0
     goos:

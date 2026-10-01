@@ -1,11 +1,10 @@
-package main
+package config
 
 import (
 	"os"
 	"testing"
 	"time"
 
-	"github.com/mxpv/podsync/services/web"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -13,45 +12,49 @@ import (
 )
 
 func TestLoadConfig(t *testing.T) {
-	const file = `
-[tokens]
-youtube = "123"
-vimeo = ["321", "456"]
-
-[server]
-port = 80
-data_dir = "test/data/"
-
-[database]
-dir = "/home/user/db/"
-
-[downloader]
-self_update = true
-timeout = 15
-
-[feeds]
-  [feeds.XYZ]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
-  page_size = 48
-  update_period = "5h"
-  format = "audio"
-  quality = "low"
-	# duration filters are in seconds
-	# max_age is in days
-	# min_age is in days
-  filters = { title = "regex for title here", min_duration = 0, max_duration = 86400, max_age = 365, min_age = 1}
-  playlist_sort = "desc"
-  clean = { keep_last = 10 }
-  [feeds.XYZ.custom]
-  cover_art = "http://img"
-  cover_art_quality = "high"
-  category = "TV"
-  subcategories = ["1", "2"]
-  explicit = true
-  lang = "en"
-  author = "Mrs. Smith (mrs@smith.org)"
-  ownerName = "Mrs. Smith"
-  ownerEmail = "mrs@smith.org"
+	const file = `"tokens":
+  youtube: "123"
+  vimeo:
+    - "321"
+    - "456"
+server:
+  port: 80
+database:
+  dir: "/home/user/db/"
+downloader:
+  self_update: true
+  timeout: 15
+feeds:
+  XYZ:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
+    page_size: 48
+    update_period: "5h"
+    format: "audio"
+    quality: "low"
+    filters:
+      title: "regex for title here"
+      min_duration: 0
+      max_duration: 86400
+      max_age: 365
+      min_age: 1
+    playlist_sort: "desc"
+    clean:
+      keep_last: 10
+    custom:
+      cover_art: "http://img"
+      cover_art_quality: "high"
+      category: "TV"
+      subcategories:
+        - "1"
+        - "2"
+      explicit: true
+      lang: "en"
+      author: "Mrs. Smith (mrs@smith.org)"
+      owner_name: "Mrs. Smith"
+      owner_email: "mrs@smith.org"
+storage:
+  local:
+    data_dir: "test/data/"
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -60,7 +63,7 @@ timeout = 15
 	assert.NoError(t, err)
 	require.NotNil(t, config)
 
-	assert.Equal(t, "test/data/", config.Server.DataDir)
+	assert.Equal(t, "test/data/", config.Storage.Local.DataDir)
 	assert.EqualValues(t, 80, config.Server.Port)
 
 	assert.Equal(t, "/home/user/db/", config.Database.Dir)
@@ -104,15 +107,15 @@ timeout = 15
 }
 
 func TestLoadEmptyKeyList(t *testing.T) {
-	const file = `
-[tokens]
-vimeo = []
-
-[server]
-data_dir = "/data"
-[feeds]
-  [feeds.A]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
+	const file = `"tokens":
+  vimeo: []
+server: {}
+feeds:
+  A:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
+storage:
+  local:
+    data_dir: "/data"
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -126,13 +129,13 @@ data_dir = "/data"
 }
 
 func TestApplyDefaults(t *testing.T) {
-	const file = `
-[server]
-data_dir = "/data"
-
-[feeds]
-  [feeds.A]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
+	const file = `"server": {}
+feeds:
+  A:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
+storage:
+  local:
+    data_dir: "/data"
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -145,7 +148,7 @@ data_dir = "/data"
 	feed, ok := config.Feeds["A"]
 	require.True(t, ok)
 
-	assert.EqualValues(t, feed.UpdatePeriod, model.DefaultUpdatePeriod)
+	assert.EqualValues(t, feed.UpdatePeriod, DefaultUpdatePeriod)
 	assert.EqualValues(t, feed.PageSize, 50)
 	assert.EqualValues(t, feed.Quality, "high")
 	assert.EqualValues(t, feed.Custom.CoverArtQuality, "high")
@@ -153,7 +156,7 @@ data_dir = "/data"
 }
 
 func TestLoadDatabaseConfigDoesNotRequireApplicationConfig(t *testing.T) {
-	path := setup(t, "[database]\ntype = \"sqlite\"\ndir = \"/tmp/podsync-test\"\n")
+	path := setup(t, "\"database\":\n  \"type\": \"sqlite\"\n  \"dir\": \"/tmp/podsync-test\"\n")
 	defer os.Remove(path)
 
 	config, err := LoadDatabaseConfig(path)
@@ -163,20 +166,19 @@ func TestLoadDatabaseConfigDoesNotRequireApplicationConfig(t *testing.T) {
 }
 
 func TestHttpServerListenAddress(t *testing.T) {
-	const file = `
-[server]
-bind_address = "172.20.10.2"
-port = 8080
-path = "test"
-data_dir = "/data"
-
-[feeds]
-  [feeds.A]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
-
-[database]
-  type = "sqlite"
-  dsn = "/data/podsync.db"
+	const file = `"server":
+  bind_address: "172.20.10.2"
+  port: 8080
+  path: "test"
+feeds:
+  A:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
+database:
+  type: "sqlite"
+  dsn: "/data/podsync.db"
+storage:
+  local:
+    data_dir: "/data"
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -190,7 +192,7 @@ data_dir = "/data"
 
 func TestDefaultHostname(t *testing.T) {
 	cfg := Config{
-		Server: web.Config{},
+		Server: Server{},
 	}
 
 	t.Run("empty hostname", func(t *testing.T) {
@@ -215,26 +217,25 @@ func TestDefaultHostname(t *testing.T) {
 
 func TestDefaultDatabasePath(t *testing.T) {
 	cfg := Config{}
-	cfg.applyDefaults("/home/user/podsync/config.toml")
+	cfg.applyDefaults("/home/user/podsync/config.yaml")
 	assert.Equal(t, "/home/user/podsync/db", cfg.Database.Dir)
 	assert.Equal(t, "sqlite", cfg.Database.Type)
 	assert.Equal(t, "/home/user/podsync/db/podsync.db", cfg.Database.DSN)
 }
 
 func TestLoadSQLConfig(t *testing.T) {
-	const file = `
-[server]
-data_dir = "/data"
-
-[feeds]
-  [feeds.A]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
-
-[database]
-  type = "mysql"
-  dsn = "user:pass@tcp(127.0.0.1:3306)/podsync?charset=utf8mb4&parseTime=True"
-  max_open_conns = 10
-  max_idle_conns = 5
+	const file = `"server": {}
+feeds:
+  A:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
+database:
+  type: "mysql"
+  dsn: "user:pass@tcp(127.0.0.1:3306)/podsync?charset=utf8mb4&parseTime=True"
+  max_open_conns: 10
+  max_idle_conns: 5
+storage:
+  local:
+    data_dir: "/data"
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -250,22 +251,19 @@ data_dir = "/data"
 }
 
 func TestLoadR2Config(t *testing.T) {
-	const file = `
-[server]
-hostname = "http://localhost:8080"
-
-[storage]
-type = "r2"
-  [storage.r2]
-  endpoint_url = "https://account.r2.cloudflarestorage.com"
-  bucket = "podcasts"
-  public_url = "https://media.example.com"
-  access_key_id = "access"
-  secret_access_key = "secret"
-
-[feeds]
-  [feeds.A]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
+	const file = `"server":
+  hostname: "http://localhost:8080"
+storage:
+  type: "r2"
+  r2:
+    endpoint_url: "https://account.r2.cloudflarestorage.com"
+    bucket: "podcasts"
+    public_url: "https://media.example.com"
+    access_key_id: "access"
+    secret_access_key: "secret"
+feeds:
+  A:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
 `
 	path := setup(t, file)
 	defer os.Remove(path)
@@ -279,20 +277,19 @@ type = "r2"
 
 func TestGlobalCleanupPolicy(t *testing.T) {
 	t.Run("global cleanup policy applied to feeds without cleanup", func(t *testing.T) {
-		const file = `
-[cleanup]
-keep_last = 25
-
-[server]
-data_dir = "/data"
-
-[feeds]
-  [feeds.FEED1]
-  url = "https://youtube.com/channel/test1"
-  
-  [feeds.FEED2]
-  url = "https://youtube.com/channel/test2"
-  clean = { keep_last = 5 }
+		const file = `"cleanup":
+  keep_last: 25
+server: {}
+feeds:
+  FEED1:
+    url: "https://youtube.com/channel/test1"
+  FEED2:
+    url: "https://youtube.com/channel/test2"
+    clean:
+      keep_last: 5
+storage:
+  local:
+    data_dir: "/data"
 `
 		path := setup(t, file)
 		defer os.Remove(path)
@@ -319,17 +316,17 @@ data_dir = "/data"
 	})
 
 	t.Run("no global cleanup policy", func(t *testing.T) {
-		const file = `
-[server]
-data_dir = "/data"
-
-[feeds]
-  [feeds.FEED1]
-  url = "https://youtube.com/channel/test1"
-  
-  [feeds.FEED2]
-  url = "https://youtube.com/channel/test2"
-  clean = { keep_last = 5 }
+		const file = `"server": {}
+feeds:
+  FEED1:
+    url: "https://youtube.com/channel/test1"
+  FEED2:
+    url: "https://youtube.com/channel/test2"
+    clean:
+      keep_last: 5
+storage:
+  local:
+    data_dir: "/data"
 `
 		path := setup(t, file)
 		defer os.Remove(path)
@@ -354,17 +351,17 @@ data_dir = "/data"
 	})
 
 	t.Run("feed cleanup overrides global cleanup", func(t *testing.T) {
-		const file = `
-[cleanup]
-keep_last = 100
-
-[server]
-data_dir = "/data"
-
-[feeds]
-  [feeds.FEED1]
-  url = "https://youtube.com/channel/test1"
-  clean = { keep_last = 10 }
+		const file = `"cleanup":
+  keep_last: 100
+server: {}
+feeds:
+  FEED1:
+    url: "https://youtube.com/channel/test1"
+    clean:
+      keep_last: 10
+storage:
+  local:
+    data_dir: "/data"
 `
 		path := setup(t, file)
 		defer os.Remove(path)
@@ -387,17 +384,16 @@ data_dir = "/data"
 
 func TestEnvironmentVariables(t *testing.T) {
 	t.Run("environment variables override config tokens", func(t *testing.T) {
-		const file = `
-[tokens]
-youtube = "original_key"
-vimeo = "original_vimeo_key"
-
-[server]
-data_dir = "/data"
-
-[feeds]
-  [feeds.A]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
+		const file = `"tokens":
+  youtube: "original_key"
+  vimeo: "original_vimeo_key"
+server: {}
+feeds:
+  A:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
+storage:
+  local:
+    data_dir: "/data"
 `
 		path := setup(t, file)
 		defer os.Remove(path)
@@ -419,13 +415,13 @@ data_dir = "/data"
 	})
 
 	t.Run("environment variables support multiple keys", func(t *testing.T) {
-		const file = `
-[server]
-data_dir = "/data"
-
-[feeds]
-  [feeds.A]
-  url = "https://youtube.com/watch?v=ygIUF678y40"
+		const file = `"server": {}
+feeds:
+  A:
+    url: "https://youtube.com/watch?v=ygIUF678y40"
+storage:
+  local:
+    data_dir: "/data"
 `
 		path := setup(t, file)
 		defer os.Remove(path)
@@ -445,7 +441,7 @@ data_dir = "/data"
 func setup(t *testing.T, file string) string {
 	t.Helper()
 
-	f, err := os.CreateTemp("", "")
+	f, err := os.CreateTemp(t.TempDir(), "config-*.yaml")
 	require.NoError(t, err)
 
 	defer f.Close()

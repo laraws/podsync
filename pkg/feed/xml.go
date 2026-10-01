@@ -11,6 +11,7 @@ import (
 	itunes "github.com/eduncan911/podcast"
 	"github.com/pkg/errors"
 
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/model"
 )
 
@@ -30,7 +31,7 @@ func (p timeSlice) Swap(i, j int) {
 	p[i], p[j] = p[j], p[i]
 }
 
-func Build(_ctx context.Context, feed *model.Feed, cfg *Config, hostname string) (*itunes.Podcast, error) {
+func Build(_ctx context.Context, feed *model.Feed, cfg *appconfig.Feed, hostname string) (*itunes.Podcast, error) {
 	const (
 		podsyncGenerator = "Podsync generator (support us at https://github.com/mxpv/podsync)"
 		defaultCategory  = "TV & Film"
@@ -168,7 +169,7 @@ func Build(_ctx context.Context, feed *model.Feed, cfg *Config, hostname string)
 	return &p, nil
 }
 
-func EpisodeName(feedConfig *Config, episode *model.Episode) string {
+func EpisodeName(feedConfig *appconfig.Feed, episode *model.Episode) string {
 	ext := "mp4"
 	if feedConfig.Format == model.FormatAudio {
 		ext = "mp3"
@@ -180,7 +181,7 @@ func EpisodeName(feedConfig *Config, episode *model.Episode) string {
 	return fmt.Sprintf("%s.%s", episode.ID, ext)
 }
 
-func EnclosureFromExtension(feedConfig *Config) itunes.EnclosureType {
+func EnclosureFromExtension(feedConfig *appconfig.Feed) itunes.EnclosureType {
 	ext := feedConfig.CustomFormat.Extension
 
 	switch ext {

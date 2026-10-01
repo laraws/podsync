@@ -9,10 +9,11 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/model"
 )
 
-func BuildOPML(ctx context.Context, feeds map[string]*Config, db feedProvider, hostname string) (string, error) {
+func BuildOPML(ctx context.Context, feeds map[string]*appconfig.Feed, db feedProvider, hostname string) (string, error) {
 	doc := opml.OPML{Version: "1.0"}
 	doc.Head = opml.Head{Title: "Podsync feeds"}
 	doc.Body = opml.Body{}

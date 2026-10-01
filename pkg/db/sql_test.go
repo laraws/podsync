@@ -10,12 +10,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/model"
 )
 
 func newTestSQL(t *testing.T) *SQL {
 	t.Helper()
-	database, err := New(&Config{Type: "sqlite", DSN: filepath.Join(t.TempDir(), "test.db")})
+	database, err := New(&appconfig.Database{Type: "sqlite", DSN: filepath.Join(t.TempDir(), "test.db")})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, database.Close()) })
 	return database
@@ -92,14 +93,14 @@ func TestNewAddsObjectKeyToExistingSQLiteSchema(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, raw.Close())
 
-	database, err := New(&Config{Type: "sqlite", DSN: path})
+	database, err := New(&appconfig.Database{Type: "sqlite", DSN: path})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, database.Close()) })
 	assert.True(t, database.db.Migrator().HasColumn(&episodeRow{}, "ObjectKey"))
 }
 
 func TestNewRejectsUnsupportedDriver(t *testing.T) {
-	_, err := New(&Config{Type: "postgres", DSN: "ignored"})
+	_, err := New(&appconfig.Database{Type: "postgres", DSN: "ignored"})
 	assert.EqualError(t, err, `unsupported database type "postgres" (expected sqlite or mysql)`)
 }
 

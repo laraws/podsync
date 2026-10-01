@@ -1,0 +1,148 @@
+# Podsync YAML configuration. Copy to config.yaml and edit for your deployment.
+# Precedence: explicit CLI flags > environment variables > YAML > defaults.
+# Relative paths resolve from the process working directory.
+
+# Optional global cleanup; feeds can override it with their own clean.keep_last.
+# Remove this section to disable global cleanup.
+cleanup:
+  keep_last: 50
+
+server:
+  port: 8080
+  # Public URL used in RSS links, including any reverse-proxy prefix.
+  hostname: "https://my.test.host:4443"
+  # "*" listens on all interfaces; "127.0.0.1" listens locally.
+  bind_address: "172.20.10.2"
+  # Optional reverse-proxy path, using only letters and numbers.
+  path: "test"
+  # Feeds need opml: true to appear in the Web UI.
+  web_ui: true
+  # HTTPS requires both certificate files. For HTTP, set tls: false.
+  tls: true
+  certificate_path: "/var/www/cert.pem"
+  key_file_path: "/var/www/priv.pem"
+  # Optional runtime metrics at /debug/vars.
+  debug_endpoints: false
+
+storage:
+  # local (default), s3, or r2.
+  type: "local"
+  local:
+    # Container mount path; use ./data for local development.
+    data_dir: "/app/data"
+  s3:
+    # AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or the AWS credential chain.
+    endpoint_url: "https://s3.us-west-2.amazonaws.com"
+    region: "us-west-2"
+    bucket: "example-bucket-name"
+    prefix: "example/prefix"
+    # Optional public enclosure URL and explicit credentials.
+    # public_url: "https://media.example.com"
+    # access_key_id: "..."
+    # secret_access_key: "..."
+    # use_path_style: true
+  r2:
+    endpoint_url: "https://ACCOUNT_ID.r2.cloudflarestorage.com"
+    bucket: "example-bucket-name"
+    # Enabled R2 custom domain or r2.dev URL, separate from the API endpoint.
+    public_url: "https://media.example.com"
+    prefix: ""
+    # Prefer PODSYNC_R2_ACCESS_KEY_ID/PODSYNC_R2_SECRET_ACCESS_KEY.
+    # access_key_id: "..."
+    # secret_access_key: "..."
+
+# Keys may be a string or an array. Multiple keys rotate across API requests.
+# Named environment variables override file values:
+# PODSYNC_YOUTUBE_API_KEY, PODSYNC_VIMEO_API_KEY,
+# PODSYNC_SOUNDCLOUD_API_KEY, PODSYNC_TWITCH_API_KEY (CLIENT_ID:CLIENT_SECRET).
+# Environment variables can contain space-separated keys.
+tokens:
+  youtube: "YOUTUBE_API_TOKEN"
+  vimeo: ["VIMEO_API_KEY_1", "VIMEO_API_KEY_2"]
+
+feeds:
+  # Case-sensitive identifier used in database rows and /ID1.xml.
+  ID1:
+    url: "https://www.youtube.com/channel/CHANNEL_NAME_TO_HOST"
+    # Episodes per API page; this is not a total download limit.
+    page_size: 50
+    update_period: "12h"
+    quality: "high" # high or low
+    format: "video" # audio, video, or custom
+    # Used when format: custom.
+    custom_format:
+      youtube_dl_format: "bestaudio[ext=m4a]"
+      extension: "m4a"
+    playlist_sort: "asc" # asc or desc
+    max_height: 720
+    opml: true
+    # Explicit cron schedule suppresses the immediate startup update.
+    # Without cron_schedule, update_period controls subsequent updates.
+    cron_schedule: "@every 12h"
+    clean:
+      keep_last: 10
+    filters:
+      # Title and description filters are regular expressions.
+      title: "regex for title here"
+      not_title: "regex for negative title match"
+      description: "..."
+      not_description: "..."
+      # Durations are seconds; ages are days.
+      min_duration: 0
+      max_duration: 86400
+      max_age: 365
+      min_age: 1
+    youtube_dl_args: ["--write-sub", "--embed-subs", "--sub-lang", "en,en-US,en-GB"]
+    private_feed: true
+    # Hooks run in order after a successful episode download.
+    # Environment: EPISODE_FILE, FEED_NAME, EPISODE_TITLE.
+    # A single command string uses /bin/sh -c; multiple items execute directly.
+    # Timeout is seconds (default 60). Use a shell to expand environment variables.
+    post_episode_download:
+      - command: ['curl -X POST -d "New episode: $EPISODE_TITLE" https://webhook.example.com/notify']
+        timeout: 30
+      - command: ["/path/to/your/process-episode.sh"]
+        timeout: 120
+    custom:
+      title: "Level1News"
+      description: "News sections of Level1Techs, in a podcast feed!"
+      author: "Level1Tech"
+      cover_art: "{IMAGE_URL}"
+      cover_art_quality: "high"
+      category: "TV"
+      subcategories: ["Documentary", "Tech News"]
+      explicit: true
+      lang: "en"
+      link: "https://example.org"
+      owner_name: "Mrs. Smith"
+      owner_email: "mrs@smith.org"
+
+# SQLite defaults to db/podsync.db next to the configuration file.
+database:
+  type: "sqlite" # sqlite or mysql
+  dir: "/app/db"
+  # dsn overrides the derived SQLite path.
+  # dsn: "/app/db/podsync.db"
+  # MySQL example (replace credentials and configure TLS for your server):
+  # type: "mysql"
+  # dsn: "user:password@tcp(mysql:3306)/podsync?charset=utf8mb4&parseTime=true&tls=true"
+  # max_open_conns: 10
+  # max_idle_conns: 5
+
+downloader:
+  self_update: true
+  # Download timeout in minutes.
+  timeout: 15
+  # Custom binaries disable automatic self-updates.
+  # custom_binary: "yt-dlp"
+
+log:
+  # One append-only file per local calendar date: log/YYYY-MM-DD.log.
+  dir: "log"
+  debug: false
+  # Optional size-based rotation when dir is empty.
+  # filename: "podsync.log"
+  # max_size: 50 # MB
+  # max_age: 30 # days
+  # max_backups: 7
+  # compress: false

@@ -1,37 +1,37 @@
-package main
+package config
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/mxpv/podsync/pkg/db"
-	"github.com/mxpv/podsync/pkg/feed"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+	"go.yaml.in/yaml/v3"
 )
 
-// configReader owns one Viper instance per invocation. CLI flags are bound to
+// Reader owns one Viper instance per invocation. CLI flags are bound to
 // this same instance, so explicit flags override environment and file values.
-type configReader struct {
+type Reader struct {
 	v     *viper.Viper
 	codec *feedIDCodec
 }
 
-func newConfigReader() *configReader {
-	registry := viper.NewCodecRegistry()
-	decoder, _ := registry.Decoder("toml")
-	encoder, _ := registry.Encoder("toml")
-	codec := &feedIDCodec{Decoder: decoder, Encoder: encoder}
-	_ = registry.RegisterCodec("toml", codec)
-	v := viper.NewWithOptions(viper.WithCodecRegistry(registry))
-	v.SetConfigType("toml")
+func NewReader() *Reader {
+	codec := &feedIDCodec{}
+	registry := yamlRegistry{codec}
+	v := viper.NewWithOptions(viper.WithDecoderRegistry(registry))
+	v.SetConfigType("yaml")
 	v.SetEnvPrefix("PODSYNC")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AllowEmptyEnv(true)
-	v.SetDefault("config", "config.toml")
-	v.SetDefault("server.port", 8080)
+	v.SetDefault("config", DefaultConfigPath)
+	v.SetDefault("server.port", DefaultServerPort)
 	v.SetDefault("storage.type", "local")
 	v.SetDefault("database.type", "sqlite")
 
@@ -54,7 +54,7 @@ func newConfigReader() *configReader {
 	// Bind known struct fields explicitly so environment-only values are also
 	// included by Viper.Unmarshal. Dynamic feed maps keep their file settings.
 	bindStructEnv(v, "", reflect.TypeOf(Config{}))
-	return &configReader{v: v, codec: codec}
+	return &Reader{v: v, codec: codec}
 }
 
 func bindStructEnv(v *viper.Viper, prefix string, typ reflect.Type) {
@@ -86,15 +86,19 @@ func bindStructEnv(v *viper.Viper, prefix string, typ reflect.Type) {
 	}
 }
 
-func (r *configReader) read(path string) error {
+func (r *Reader) read(path string) error {
+	ext := strings.ToLower(filepath.Ext(path))
+	if ext != ".yaml" && ext != ".yml" {
+		return fmt.Errorf("configuration file must use .yaml or .yml: %s", path)
+	}
 	r.v.SetConfigFile(path)
 	if err := r.v.ReadInConfig(); err != nil {
-		return fmt.Errorf("read TOML configuration %s: %w", path, err)
+		return fmt.Errorf("read YAML configuration %s: %w", path, err)
 	}
 	return nil
 }
 
-func (r *configReader) load(path string) (*Config, error) {
+func (r *Reader) Load(path string) (*Config, error) {
 	if err := r.read(path); err != nil {
 		return nil, err
 	}
@@ -102,7 +106,7 @@ func (r *configReader) load(path string) (*Config, error) {
 	if err := r.v.Unmarshal(&config, configDecodeHook()); err != nil {
 		return nil, fmt.Errorf("decode configuration: %w", err)
 	}
-	feeds := make(map[string]*feed.Config, len(config.Feeds))
+	feeds := make(map[string]*Feed, len(config.Feeds))
 	for key, f := range config.Feeds {
 		id := r.codec.feedIDs[key]
 		if id == "" || f == nil {
@@ -119,18 +123,18 @@ func (r *configReader) load(path string) (*Config, error) {
 	return &config, nil
 }
 
-func (r *configReader) loadDatabase(path string) (*db.Config, error) {
+func (r *Reader) LoadDatabase(path string) (*Database, error) {
 	if err := r.read(path); err != nil {
 		return nil, err
 	}
-	return r.databaseConfig(path)
+	return r.DatabaseConfig(path)
 }
 
-func (r *configReader) databaseConfig(path string) (*db.Config, error) {
+func (r *Reader) DatabaseConfig(path string) (*Database, error) {
 	// Unmarshal the envelope so Viper resolves each bound child key. Reading
 	// the database subtree alone would miss environment-only and flag values.
 	var config struct {
-		Database db.Config `mapstructure:"database"`
+		Database Database `mapstructure:"database"`
 	}
 	if err := r.v.Unmarshal(&config, configDecodeHook()); err != nil {
 		return nil, fmt.Errorf("decode database configuration: %w", err)
@@ -168,18 +172,24 @@ func stringSliceHook(from, to reflect.Type, value any) (any, error) {
 }
 
 // Viper normalizes keys, but feed identifiers are case-sensitive data used in
-// database rows and RSS URLs. Replace only feed map keys during native TOML
+// database rows and RSS URLs. Replace only feed map keys during native YAML
 // decoding, then restore the original identifiers after unmarshaling. Safe
 // internal keys also preserve identifiers containing dots or differing by case.
 type feedIDCodec struct {
-	viper.Encoder
-	viper.Decoder
 	feedIDs map[string]string
 }
 
 func (c *feedIDCodec) Decode(data []byte, values map[string]any) error {
-	if err := c.Decoder.Decode(data, values); err != nil {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	if err := decoder.Decode(values); err != nil {
 		return err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return fmt.Errorf("configuration must contain a single YAML mapping document")
+	}
+	if len(values) == 0 {
+		return fmt.Errorf("configuration must contain a nonempty YAML mapping")
 	}
 	c.feedIDs = make(map[string]string)
 	for key, value := range values {
@@ -204,4 +214,24 @@ func (c *feedIDCodec) Decode(data []byte, values map[string]any) error {
 		values[key] = aliased
 	}
 	return nil
+}
+
+// BindFlag attaches command flags to this invocation's configuration precedence.
+func (r *Reader) BindFlag(key string, flag *pflag.Flag) error { return r.v.BindPFlag(key, flag) }
+func (r *Reader) Path() string                                { return r.v.GetString("config") }
+func (r *Reader) Debug() bool                                 { return r.v.GetBool("log.debug") }
+func (r *Reader) NoBanner() bool                              { return r.v.GetBool("no-banner") }
+func (r *Reader) OverrideDatabase(driver, dsn string) {
+	r.v.Set("database.type", driver)
+	r.v.Set("database.dsn", dsn)
+}
+
+// yamlRegistry deliberately exposes only YAML decoding to Viper.
+type yamlRegistry struct{ codec *feedIDCodec }
+
+func (r yamlRegistry) Decoder(format string) (viper.Decoder, error) {
+	if format != "yaml" && format != "yml" {
+		return nil, fmt.Errorf("unsupported configuration format: %s", format)
+	}
+	return r.codec, nil
 }

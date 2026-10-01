@@ -18,6 +18,7 @@ import (
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/model"
 )
 
@@ -77,7 +78,7 @@ var _ Storage = (*SQL)(nil)
 
 // New opens the configured SQL database. Schema creation is intentionally
 // handled by the SQL files under pkg/db/.
-func New(config *Config) (*SQL, error) {
+func New(config *appconfig.Database) (*SQL, error) {
 	var dialector gorm.Dialector
 	switch config.Type {
 	case "sqlite":

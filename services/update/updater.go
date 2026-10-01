@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/builder"
 	"github.com/mxpv/podsync/pkg/db"
 	"github.com/mxpv/podsync/pkg/feed"
@@ -22,7 +23,7 @@ import (
 )
 
 type Downloader interface {
-	Download(ctx context.Context, feedConfig *feed.Config, episode *model.Episode) (io.ReadCloser, error)
+	Download(ctx context.Context, feedConfig *appconfig.Feed, episode *model.Episode) (io.ReadCloser, error)
 	PlaylistMetadata(ctx context.Context, url string) (metadata ytdl.PlaylistMetadata, err error)
 }
 
@@ -33,12 +34,12 @@ type Manager struct {
 	downloader Downloader
 	db         db.Storage
 	fs         fs.Storage
-	feeds      map[string]*feed.Config
+	feeds      map[string]*appconfig.Feed
 	keys       map[model.Provider]feed.KeyProvider
 }
 
 func NewUpdater(
-	feeds map[string]*feed.Config,
+	feeds map[string]*appconfig.Feed,
 	keys map[model.Provider]feed.KeyProvider,
 	publicURL string,
 	downloader Downloader,
@@ -55,7 +56,7 @@ func NewUpdater(
 	}, nil
 }
 
-func (u *Manager) Update(ctx context.Context, feedConfig *feed.Config) error {
+func (u *Manager) Update(ctx context.Context, feedConfig *appconfig.Feed) error {
 	log.WithFields(log.Fields{
 		"feed_id": feedConfig.ID,
 		"format":  feedConfig.Format,
@@ -96,7 +97,7 @@ func (u *Manager) Update(ctx context.Context, feedConfig *feed.Config) error {
 }
 
 // updateFeed pulls API for new episodes and saves them to database
-func (u *Manager) updateFeed(ctx context.Context, feedConfig *feed.Config) error {
+func (u *Manager) updateFeed(ctx context.Context, feedConfig *appconfig.Feed) error {
 	info, err := builder.ParseURL(feedConfig.URL)
 	if err != nil {
 		return errors.Wrapf(err, "failed to parse URL: %s", feedConfig.URL)
@@ -153,7 +154,7 @@ func (u *Manager) updateFeed(ctx context.Context, feedConfig *feed.Config) error
 	return nil
 }
 
-func (u *Manager) fetchEpisodes(ctx context.Context, feedConfig *feed.Config) ([]*model.Episode, error) {
+func (u *Manager) fetchEpisodes(ctx context.Context, feedConfig *appconfig.Feed) ([]*model.Episode, error) {
 	var (
 		feedID       = feedConfig.ID
 		downloadList []*model.Episode
@@ -228,7 +229,7 @@ func (u *Manager) fetchEpisodes(ctx context.Context, feedConfig *feed.Config) ([
 	return downloadList, nil
 }
 
-func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config, downloadList []*model.Episode) error {
+func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *appconfig.Feed, downloadList []*model.Episode) error {
 	var (
 		downloadCount = len(downloadList)
 		downloaded    = 0
@@ -316,7 +317,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config,
 			}
 
 			for i, hook := range feedConfig.PostEpisodeDownload {
-				if err := hook.Invoke(env); err != nil {
+				if err := feed.InvokeHook(hook, env); err != nil {
 					logger.Errorf("failed to execute post episode download hook %d: %v", i+1, err)
 				} else {
 					logger.Infof("post episode download hook %d executed successfully", i+1)
@@ -343,7 +344,7 @@ func (u *Manager) downloadEpisodes(ctx context.Context, feedConfig *feed.Config,
 	return nil
 }
 
-func (u *Manager) buildXML(ctx context.Context, feedConfig *feed.Config) error {
+func (u *Manager) buildXML(ctx context.Context, feedConfig *appconfig.Feed) error {
 	f, err := u.db.GetFeed(ctx, feedConfig.ID)
 	if err != nil {
 		return err
@@ -395,7 +396,7 @@ func (u *Manager) buildOPML(ctx context.Context) error {
 	return nil
 }
 
-func (u *Manager) cleanup(ctx context.Context, feedConfig *feed.Config) error {
+func (u *Manager) cleanup(ctx context.Context, feedConfig *appconfig.Feed) error {
 	var (
 		feedID = feedConfig.ID
 		logger = log.WithField("feed_id", feedID)
@@ -462,7 +463,7 @@ func (u *Manager) cleanup(ctx context.Context, feedConfig *feed.Config) error {
 	return result.ErrorOrNil()
 }
 
-func (u *Manager) episodeObjectKey(feedConfig *feed.Config, episode *model.Episode) string {
+func (u *Manager) episodeObjectKey(feedConfig *appconfig.Feed, episode *model.Episode) string {
 	if episode.ObjectKey != "" {
 		return episode.ObjectKey
 	}

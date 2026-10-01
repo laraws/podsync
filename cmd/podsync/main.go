@@ -10,18 +10,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mxpv/podsync/pkg/feed"
-	"github.com/mxpv/podsync/pkg/model"
-	"github.com/mxpv/podsync/services/update"
-	"github.com/mxpv/podsync/services/web"
 	"github.com/robfig/cron/v3"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"gopkg.in/natefinch/lumberjack.v2"
 
+	"github.com/mxpv/podsync/internal/buildinfo"
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/db"
+	"github.com/mxpv/podsync/pkg/feed"
 	"github.com/mxpv/podsync/pkg/fs"
+	"github.com/mxpv/podsync/pkg/model"
 	"github.com/mxpv/podsync/pkg/ytdl"
+	"github.com/mxpv/podsync/services/update"
+	"github.com/mxpv/podsync/services/web"
 )
 
 type serviceOptions struct {
@@ -29,7 +31,7 @@ type serviceOptions struct {
 	RunOnce    bool
 	Debug      bool
 	NoBanner   bool
-	reader     *configReader
+	reader     *appconfig.Reader
 }
 
 const banner = `
@@ -42,13 +44,6 @@ const banner = `
 | )      | (___) || (__/  )/\____) |   | |   | )  \  || (____/\
 |/       (_______)(______/ \_______)   \_/   |/    )_)(_______/
 `
-
-var (
-	version = "dev"
-	commit  = "none"
-	date    = "unknown"
-	arch    = ""
-)
 
 func main() {
 	log.SetFormatter(&log.TextFormatter{
@@ -75,19 +70,19 @@ func runService(ctx context.Context, opts serviceOptions) error {
 	}
 
 	log.WithFields(log.Fields{
-		"version": version,
-		"commit":  commit,
-		"date":    date,
-		"arch":    arch,
+		"version": buildinfo.DisplayVersion(),
+		"commit":  buildinfo.Commit,
+		"date":    buildinfo.Date,
+		"arch":    buildinfo.Arch,
 	}).Info("running podsync")
 
-	// Load TOML file
+	// Load YAML file
 	log.Debugf("loading configuration %q", opts.ConfigPath)
 	reader := opts.reader
 	if reader == nil {
-		reader = newConfigReader()
+		reader = appconfig.NewReader()
 	}
-	cfg, err := reader.load(opts.ConfigPath)
+	cfg, err := reader.Load(opts.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load configuration file: %w", err)
 	}
@@ -183,7 +178,7 @@ func runService(ctx context.Context, opts serviceOptions) error {
 	}
 
 	// Queue of feeds to update
-	updates := make(chan *feed.Config, 16)
+	updates := make(chan *appconfig.Feed, 16)
 	defer close(updates)
 
 	group, ctx := errgroup.WithContext(ctx)

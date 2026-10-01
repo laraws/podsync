@@ -6,35 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
 )
 
-// ExecHook represents a single hook configuration that executes commands
-// after specific lifecycle events (e.g., episode downloads).
+// InvokeHook executes the hook command with the provided environment variables.
 //
-// Example configuration:
-//
-//	[[feeds.ID1.post_episode_download]]
-//	command = ["curl", "-X", "POST", "-d", "$EPISODE_TITLE", "webhook.example.com"]
-//	timeout = 30
-//
-// Environment variables available to hooks:
-//   - EPISODE_FILE: Path to downloaded file (e.g., "podcast-id/episode.mp3")
-//   - FEED_NAME: The feed identifier
-//   - EPISODE_TITLE: The episode title
-type ExecHook struct {
-	// Command is the command and arguments to execute.
-	// For single commands, use shell parsing: ["echo hello"]
-	// For multiple args, pass directly: ["curl", "-X", "POST", "url"]
-	Command []string `mapstructure:"command"`
-
-	// Timeout in seconds for command execution.
-	// If 0 or unset, defaults to 60 seconds.
-	Timeout int `mapstructure:"timeout"`
-}
-
-// Invoke executes the hook command with the provided environment variables.
-//
-// The method handles nil hooks gracefully (returns nil) and validates that
+// This function handles nil hooks gracefully (returns nil) and validates that
 // the command is not empty. Commands are executed with a timeout (default 60s)
 // and inherit the parent process environment plus any additional variables.
 //
@@ -43,7 +21,7 @@ type ExecHook struct {
 //
 // Returns an error if the command fails, times out, or returns a non-zero exit code.
 // The error includes the combined stdout/stderr output for debugging.
-func (h *ExecHook) Invoke(env []string) error {
+func InvokeHook(h *appconfig.Hook, env []string) error {
 	if h == nil {
 		return nil
 	}
@@ -54,7 +32,7 @@ func (h *ExecHook) Invoke(env []string) error {
 	// Set up context with timeout (default 1 minute if not specified)
 	timeout := h.Timeout
 	if timeout == 0 {
-		timeout = 60 // default to 1 minute
+		timeout = appconfig.DefaultHookTimeout
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)

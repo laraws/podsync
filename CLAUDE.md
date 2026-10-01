@@ -10,7 +10,13 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 
 ### Main Application (`cmd/podsync/`)
 - **main.go**: Entry point with CLI argument parsing, signal handling, and service orchestration
-- **config.go**: TOML configuration loading and validation with defaults
+- **cli.go**: Cobra commands and flags bound to one configuration reader
+
+### Internal Packages (`internal/`)
+- **config/**: Central configuration types, YAML/Viper loading, environment bindings, defaults, and validation
+- **buildinfo/**: Shared build metadata for CLI version output and startup logs; injected by Makefile and GoReleaser
+
+Configuration defaults belong in `internal/config/defaults.go`. Domain enums stay in `pkg/model`; runtime constants and mutable state stay with the component that owns them.
 
 ### Core Packages (`pkg/`)
 - **builder/**: Media downloaders for different platforms (YouTube, Vimeo, SoundCloud)
@@ -27,7 +33,7 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 ### Key Dependencies
 - youtube-dl/yt-dlp for media downloading
 - GORM with SQLite/MySQL for database storage
-- Cobra for CLI commands and Viper/mapstructure for TOML configuration
+- Cobra for CLI commands and Viper/mapstructure for YAML configuration
 - robfig/cron for scheduling
 - AWS SDK for S3 storage
 
@@ -55,14 +61,14 @@ goimports -w .      # Organize imports and format
 
 ### Running
 ```bash
-./bin/podsync serve --config config.toml # Run with config file
+./bin/podsync serve --config config.yaml # Run with config file
 ./bin/podsync serve --debug           # Run with debug logging
 ./bin/podsync update                  # Run once and exit (no web server)
 ```
 
 ### Database Migration
 ```bash
-./bin/podsync init-db --config config.toml                 # Initialize using config file
+./bin/podsync init-db --config config.yaml                 # Initialize using config file
 ./bin/podsync init-db --type sqlite --dsn /app/db/podsync.db  # Initialize SQLite directly
 ./bin/podsync init-db --type mysql --dsn "user:pass@tcp(127.0.0.1:3306)/podsync"  # Initialize MySQL
 ```
@@ -74,17 +80,17 @@ docker run -it --rm localhost/podsync:latest
 ```
 
 ### Development Debugging
-Use VS Code with the Go extension. The repository includes `.vscode/launch.json` with a "Debug Podsync" configuration that runs with `config.toml`.
+Use VS Code with the Go extension. The repository includes `.vscode/launch.json` with a "Debug Podsync" configuration that runs with `config.yaml`.
 
 ## Configuration
 
-The application uses TOML configuration files. See `config.toml.example` for all available options. Key sections:
-- `[server]`: Web server settings (port, hostname, TLS)
-- `[storage]`: Local or S3 storage configuration  
-- `[database]`: Database configuration (SQLite or MySQL via GORM)
-- `[tokens]`: API keys for YouTube/Vimeo
-- `[feeds]`: Feed definitions with URLs and settings
-- `[downloader]`: youtube-dl configuration
+The application uses YAML configuration files. See `config.yaml.example` for all available options. Key sections:
+- `server`: Web server settings (port, hostname, TLS)
+- `storage`: Local or S3 storage configuration
+- `database`: Database configuration (SQLite or MySQL via GORM)
+- `tokens`: API keys for YouTube/Vimeo
+- `feeds`: Feed definitions with URLs and settings
+- `downloader`: youtube-dl configuration
 
 ## Development Guidelines
 

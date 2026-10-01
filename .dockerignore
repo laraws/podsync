@@ -2,9 +2,12 @@
 node_modules/
 vendor/
 bin/
-config.toml
-config.local-mysql.toml
-config.docker.toml
+config.yaml
+config.local-mysql.yaml
+config.docker.yaml
+config.yml
+config.local-mysql.yml
+config.docker.yml
 cookie.txt
 data/
 db/

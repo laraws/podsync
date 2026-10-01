@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mxpv/podsync/pkg/feed"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
 )
 
 var testCtx = context.Background()
@@ -41,7 +42,7 @@ func TestSoundCloud_BuildFeed(t *testing.T) {
 
 	for _, addr := range urls {
 		t.Run(addr, func(t *testing.T) {
-			_feed, err := builder.Build(testCtx, &feed.Config{URL: addr})
+			_feed, err := builder.Build(testCtx, &appconfig.Feed{URL: addr})
 			require.NoError(t, err)
 
 			assert.NotEmpty(t, _feed.Title)

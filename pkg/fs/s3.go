@@ -19,24 +19,9 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
 )
-
-// S3Config is the configuration for an S3-compatible storage provider.
-// Credentials may be omitted to use the standard AWS credential chain.
-type S3Config struct {
-	Bucket          string `mapstructure:"bucket"`
-	Region          string `mapstructure:"region"`
-	EndpointURL     string `mapstructure:"endpoint_url"`
-	Prefix          string `mapstructure:"prefix"`
-	PublicURL       string `mapstructure:"public_url"`
-	AccessKeyID     string `mapstructure:"access_key_id"`
-	SecretAccessKey string `mapstructure:"secret_access_key"`
-	UsePathStyle    bool   `mapstructure:"use_path_style"`
-}
-
-// R2Config is separate in TOML so selecting R2 is explicit while the
-// implementation continues to use its S3-compatible API.
-type R2Config S3Config
 
 type s3API interface {
 	HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
@@ -55,7 +40,7 @@ type S3 struct {
 	prefix   string
 }
 
-func NewS3(c S3Config) (*S3, error) {
+func NewS3(c appconfig.S3Storage) (*S3, error) {
 	options := []func(*awsconfig.LoadOptions) error{
 		awsconfig.WithRegion(c.Region),
 	}
@@ -83,8 +68,8 @@ func NewS3(c S3Config) (*S3, error) {
 	}, nil
 }
 
-func NewR2(c R2Config) (*S3, error) {
-	config := S3Config(c)
+func NewR2(c appconfig.R2Storage) (*S3, error) {
+	config := appconfig.S3Storage(c)
 	if config.Region == "" {
 		config.Region = "auto"
 	}

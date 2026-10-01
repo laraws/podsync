@@ -69,40 +69,32 @@ In order to query YouTube or Vimeo API you have to obtain an API token first.
 
 ## ⚙️ Configuration
 
-You need to create a configuration file (for instance `config.toml`) and specify the list of feeds that you're going to host.
-See [config.toml.example](./config.toml.example) for all possible configuration keys available in Podsync.
+You need to create a configuration file (for instance `config.yaml`) and specify the list of feeds that you're going to host.
+See [config.yaml.example](./config.yaml.example) for all possible configuration keys available in Podsync.
 
-Configuration is loaded through Viper. Precedence is explicit CLI flags, environment variables, TOML values, then defaults. Feed identifiers retain their original case. TOML syntax is checked strictly, including duplicate keys.
+Configuration is loaded through Viper. Precedence is explicit CLI flags, environment variables, YAML values, then defaults. Feed identifiers retain their original case. Only `.yaml` and `.yml` files are accepted; duplicate keys and multiple documents are rejected.
 
 Minimal configuration would look like this:
 
-```toml
-[server]
-port = 8080
-
-[storage]
-  [storage.local]
-  # Don't change if you run podsync via docker
-  data_dir = "/app/data/"
-
-[tokens]
-youtube = "PASTE YOUR API KEY HERE" # See config.toml.example for environment variables
-
-[feeds]
-    [feeds.ID1]
-    url = "https://www.youtube.com/channel/UCxC5Ls6DwqV0e-CYcAKkExQ"
+```yaml
+server:
+  port: 8080
+storage:
+  local:
+    data_dir: "/app/data/"
+tokens:
+  youtube: "PASTE YOUR API KEY HERE"
+feeds:
+  ID1:
+    url: "https://www.youtube.com/channel/UCxC5Ls6DwqV0e-CYcAKkExQ"
 ```
 
 If you want to hide Podsync behind reverse proxy like nginx, you can use `hostname` field:
 
-```toml
-[server]
-port = 8080
-hostname = "https://my.test.host:4443"
-
-[feeds]
-  [feeds.ID1]
-  ...
+```yaml
+server:
+  port: 8080
+  hostname: "https://my.test.host:4443"
 ```
 
 Server will be accessible from `http://localhost:8080`, but episode links will point to `https://my.test.host:4443/ID1/...`
@@ -111,15 +103,14 @@ Server will be accessible from `http://localhost:8080`, but episode links will p
 
 R2 stores episodes, generated RSS XML, and OPML outside the local data directory. `public_url` must be an enabled R2 custom domain (recommended) or `r2.dev` URL; it is intentionally separate from the authenticated S3 API endpoint.
 
-```toml
-[storage]
-type = "r2"
-
-  [storage.r2]
-  endpoint_url = "https://ACCOUNT_ID.r2.cloudflarestorage.com"
-  bucket = "podcasts"
-  public_url = "https://media.example.com"
-  prefix = ""
+```yaml
+storage:
+  type: "r2"
+  r2:
+    endpoint_url: "https://ACCOUNT_ID.r2.cloudflarestorage.com"
+    bucket: "podcasts"
+    public_url: "https://media.example.com"
+    prefix: ""
 ```
 
 Set the credentials with `PODSYNC_R2_ACCESS_KEY_ID` and `PODSYNC_R2_SECRET_ACCESS_KEY`. Downloaded episode rows persist only the object key; RSS enclosure URLs are assembled from `public_url` at generation time.
@@ -128,11 +119,11 @@ Set the credentials with `PODSYNC_R2_ACCESS_KEY_ID` and `PODSYNC_R2_SECRET_ACCES
 
 Podsync supports the following environment variables for configuration and API keys:
 
-Static configuration fields also support `PODSYNC_` environment variables with dots replaced by underscores, such as `PODSYNC_SERVER_PORT`, `PODSYNC_DATABASE_DSN`, and `PODSYNC_LOG_DIR`. Dynamic feed entries are configured in TOML. The named API key and R2 variables below take priority over their generic names where both are supported. Empty environment values override file values.
+Static configuration fields also support `PODSYNC_` environment variables with dots replaced by underscores, such as `PODSYNC_SERVER_PORT`, `PODSYNC_DATABASE_DSN`, and `PODSYNC_LOG_DIR`. Dynamic feed entries are configured in YAML. The named API key and R2 variables below take priority over their generic names where both are supported. Empty environment values override file values.
 
 | Variable Name                | Description                                                                               | Example Value(s)                              |
 |------------------------------|-------------------------------------------------------------------------------------------|-----------------------------------------------|
-| `PODSYNC_CONFIG_PATH`        | Default configuration file path when `--config` is not specified                         | `/app/config.toml`                            |
+| `PODSYNC_CONFIG_PATH`        | Default configuration file path when `--config` is not specified                         | `/app/config.yaml`                            |
 | `PODSYNC_DATABASE_TYPE`      | Database driver                                                                        | `sqlite` or `mysql`                           |
 | `PODSYNC_DATABASE_DSN`       | Database connection string                                                             | `user:password@tcp(host:3306)/podsync?tls=true` |
 | `PODSYNC_SERVER_PORT`        | HTTP server port                                                                       | `8080`                                       |
@@ -157,13 +148,13 @@ Running `podsync` without a subcommand shows help. Single updates return a nonze
 
 ### Build and run as binary:
 
-Make sure you have created the file `config.toml`. Also note the location of the `data_dir`. Depending on the operating system, you may have to choose a different location since `/app/data` might be not writable.
+Make sure you have created the file `config.yaml`. Also note the location of the `data_dir`. Depending on the operating system, you may have to choose a different location since `/app/data` might be not writable.
 
 ```
 $ git clone https://github.com/mxpv/podsync
 $ cd podsync
 $ make
-$ ./bin/podsync serve --config config.toml
+$ ./bin/podsync serve --config config.yaml
 ```
 
 ### 🐛 How to debug
@@ -179,7 +170,7 @@ $ docker run \
     -p 8080:8080 \
     -v $(pwd)/data:/app/data/ \
     -v $(pwd)/db:/app/db/ \
-    -v $(pwd)/config.toml:/app/config.toml \
+    -v $(pwd)/config.yaml:/app/config.yaml \
     ghcr.io/mxpv/podsync:latest
 ```
 
@@ -194,7 +185,7 @@ services:
     volumes:
       - ./data:/app/data/
       - ./db:/app/db/
-      - ./config.toml:/app/config.toml
+      - ./config.yaml:/app/config.yaml
     ports:
       - 8080:8080
 

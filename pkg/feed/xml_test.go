@@ -5,9 +5,11 @@ import (
 	"testing"
 
 	itunes "github.com/eduncan911/podcast"
-	"github.com/mxpv/podsync/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/pkg/model"
 )
 
 func TestBuildXML(t *testing.T) {
@@ -22,9 +24,9 @@ func TestBuildXML(t *testing.T) {
 		},
 	}
 
-	cfg := Config{
+	cfg := appconfig.Feed{
 		ID:     "test",
-		Custom: Custom{Description: "description", Category: "Technology", Subcategories: []string{"Gadgets", "Podcasting"}},
+		Custom: appconfig.Custom{Description: "description", Category: "Technology", Subcategories: []string{"Gadgets", "Podcasting"}},
 	}
 
 	out, err := Build(context.Background(), &feed, &cfg, "http://localhost/")
@@ -52,7 +54,7 @@ func TestBuildXMLUsesPersistedObjectKey(t *testing.T) {
 		ID: "1", Status: model.EpisodeDownloaded, Title: "title",
 		Description: "description", ObjectKey: "podcasts/test/renamed.mp3",
 	}}}
-	cfg := Config{ID: "test", Format: model.FormatAudio}
+	cfg := appconfig.Feed{ID: "test", Format: model.FormatAudio}
 
 	out, err := Build(context.Background(), &f, &cfg, "https://media.example.com/")
 	require.NoError(t, err)

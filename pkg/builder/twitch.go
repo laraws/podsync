@@ -6,17 +6,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mxpv/podsync/pkg/feed"
-	"github.com/mxpv/podsync/pkg/model"
 	"github.com/nicklaw5/helix"
 	"github.com/pkg/errors"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/pkg/model"
 )
 
 type TwitchBuilder struct {
 	client *helix.Client
 }
 
-func (t *TwitchBuilder) Build(_ctx context.Context, cfg *feed.Config) (*model.Feed, error) {
+func (t *TwitchBuilder) Build(_ctx context.Context, cfg *appconfig.Feed) (*model.Feed, error) {
 	info, err := ParseURL(cfg.URL)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to parse URL")

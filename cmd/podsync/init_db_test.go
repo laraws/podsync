@@ -11,9 +11,9 @@ import (
 
 func TestRunInitDB(t *testing.T) {
 	dir := t.TempDir()
-	configPath := filepath.Join(dir, "config.toml")
+	configPath := filepath.Join(dir, "config.yaml")
 	databasePath := filepath.Join(dir, "podsync.db")
-	content := fmt.Sprintf("[database]\ntype = \"sqlite\"\ndsn = %q\n", databasePath)
+	content := fmt.Sprintf("\"database\":\n  \"type\": \"sqlite\"\n  \"dsn\": %q\n", databasePath)
 	require.NoError(t, os.WriteFile(configPath, []byte(content), 0600))
 
 	cmd := newRootCommand(runService)

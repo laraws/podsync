@@ -25,12 +25,3 @@ type Storage interface {
 	// naming or prefix configuration changes.
 	ObjectKey(name string) string
 }
-
-// Config is a configuration for the file storage backend
-type Config struct {
-	// Type is the type of file system to use
-	Type  string      `mapstructure:"type"`
-	Local LocalConfig `mapstructure:"local"`
-	S3    S3Config    `mapstructure:"s3"`
-	R2    R2Config    `mapstructure:"r2"`
-}

@@ -5,13 +5,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/mxpv/podsync/pkg/feed"
+	appconfig "github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/pkg/model"
 )
 
 func TestNotTitleFilterIssue798(t *testing.T) {
 	// https://github.com/mxpv/podsync/issues/798
-	filters := &feed.Filters{
+	filters := &appconfig.Filters{
 		NotTitle:    "(?i)^(holy mass|holy sacrifice|the holy)( |$)",
 		MinDuration: 600,
 	}

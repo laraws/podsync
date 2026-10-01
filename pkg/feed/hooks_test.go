@@ -11,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
 )
 
 func TestExecuteHook_WriteEnvToFile(t *testing.T) {
@@ -18,7 +20,7 @@ func TestExecuteHook_WriteEnvToFile(t *testing.T) {
 	tempDir := t.TempDir()
 	tempFile := filepath.Join(tempDir, "env_output.txt")
 
-	hook := &ExecHook{
+	hook := &appconfig.Hook{
 		Command: []string{"sh", "-c", "printenv | grep '^TEST_VAR=' > " + tempFile},
 		Timeout: 5,
 	}
@@ -27,7 +29,7 @@ func TestExecuteHook_WriteEnvToFile(t *testing.T) {
 		"TEST_VAR=test-value",
 	}
 
-	err := hook.Invoke(env)
+	err := InvokeHook(hook, env)
 	require.NoError(t, err)
 
 	// Read the file and verify contents
@@ -41,7 +43,7 @@ func TestExecuteHook_WriteEnvToFile(t *testing.T) {
 func TestExecuteHook_CornerCases(t *testing.T) {
 	tests := []struct {
 		name        string
-		hook        *ExecHook
+		hook        *appconfig.Hook
 		env         []string
 		expectError bool
 		errorMsg    string
@@ -54,7 +56,7 @@ func TestExecuteHook_CornerCases(t *testing.T) {
 		},
 		{
 			name: "empty command",
-			hook: &ExecHook{
+			hook: &appconfig.Hook{
 				Command: []string{},
 			},
 			env:         []string{"TEST=value"},
@@ -63,7 +65,7 @@ func TestExecuteHook_CornerCases(t *testing.T) {
 		},
 		{
 			name: "invalid command",
-			hook: &ExecHook{
+			hook: &appconfig.Hook{
 				Command: []string{"nonexistentcommand12345"},
 			},
 			env:         []string{"TEST=value"},
@@ -72,7 +74,7 @@ func TestExecuteHook_CornerCases(t *testing.T) {
 		},
 		{
 			name: "successful command",
-			hook: &ExecHook{
+			hook: &appconfig.Hook{
 				Command: []string{"echo", "test"},
 			},
 			env:         []string{"TEST=value"},
@@ -82,7 +84,7 @@ func TestExecuteHook_CornerCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.hook.Invoke(tt.env)
+			err := InvokeHook(tt.hook, tt.env)
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -117,7 +119,7 @@ func TestExecuteHook_CurlWebhook(t *testing.T) {
 	defer server.Close()
 
 	// Use the local test server URL instead of external httpbin.org
-	hook := &ExecHook{
+	hook := &appconfig.Hook{
 		Command: []string{fmt.Sprintf("curl -s -X POST -d \"$EPISODE_TITLE\" %s", server.URL)},
 		Timeout: 10,
 	}
@@ -128,7 +130,7 @@ func TestExecuteHook_CurlWebhook(t *testing.T) {
 		"EPISODE_FILE=test-podcast/episode001.mp3",
 	}
 
-	err := hook.Invoke(env)
+	err := InvokeHook(hook, env)
 	assert.NoError(t, err, "Curl webhook should execute successfully")
 
 	// Verify that the request was actually made and data was received

@@ -12,10 +12,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/mxpv/podsync/internal/buildinfo"
 )
 
 func TestCLIServiceCommands(t *testing.T) {
-	t.Setenv("PODSYNC_CONFIG_PATH", "environment.toml")
+	t.Setenv("PODSYNC_CONFIG_PATH", "environment.yaml")
 	previousLevel := log.GetLevel()
 	t.Cleanup(func() { log.SetLevel(previousLevel) })
 	for _, test := range []struct {
@@ -23,11 +25,11 @@ func TestCLIServiceCommands(t *testing.T) {
 		args []string
 		want serviceOptions
 	}{
-		{"serve", []string{"serve"}, serviceOptions{ConfigPath: "environment.toml"}},
-		{"update", []string{"update"}, serviceOptions{ConfigPath: "environment.toml", RunOnce: true}},
-		{"flags before command", []string{"-c", "explicit.toml", "--debug", "serve", "--no-banner"}, serviceOptions{ConfigPath: "explicit.toml", Debug: true, NoBanner: true}},
-		{"flags after command", []string{"update", "--config", "explicit.toml", "--debug", "--no-banner"}, serviceOptions{ConfigPath: "explicit.toml", RunOnce: true, Debug: true, NoBanner: true}},
-		{"explicit false", []string{"serve", "--debug=false", "--no-banner=false"}, serviceOptions{ConfigPath: "environment.toml"}},
+		{"serve", []string{"serve"}, serviceOptions{ConfigPath: "environment.yaml"}},
+		{"update", []string{"update"}, serviceOptions{ConfigPath: "environment.yaml", RunOnce: true}},
+		{"flags before command", []string{"-c", "explicit.yaml", "--debug", "serve", "--no-banner"}, serviceOptions{ConfigPath: "explicit.yaml", Debug: true, NoBanner: true}},
+		{"flags after command", []string{"update", "--config", "explicit.yaml", "--debug", "--no-banner"}, serviceOptions{ConfigPath: "explicit.yaml", RunOnce: true, Debug: true, NoBanner: true}},
+		{"explicit false", []string{"serve", "--debug=false", "--no-banner=false"}, serviceOptions{ConfigPath: "environment.yaml"}},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			called := false
@@ -55,12 +57,12 @@ func TestCLIHelpVersionAndCompletionDoNotRunService(t *testing.T) {
 		want string
 	}{
 		{[]string{}, "Available Commands:"},
-		{[]string{"-c", "missing.toml"}, "Available Commands:"},
+		{[]string{"-c", "missing.yaml"}, "Available Commands:"},
 		{[]string{"--help"}, "Available Commands:"},
 		{[]string{"serve", "-h"}, "Run the feed scheduler"},
 		{[]string{"update", "--help"}, "Update all configured feeds"},
 		{[]string{"init-db", "--help"}, "--dsn"},
-		{[]string{"--version"}, version},
+		{[]string{"--version"}, buildinfo.DisplayVersion()},
 		{[]string{"completion", "zsh"}, "#compdef podsync"},
 	} {
 		t.Run(fmt.Sprint(test.args), func(t *testing.T) {
@@ -113,16 +115,16 @@ func TestCLIInitDBConfigAndDSN(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "podsync.db")
-			configPath := filepath.Join(dir, "config.toml")
-			require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("[database]\ntype = \"sqlite\"\ndsn = %q\n", filepath.ToSlash(path))), 0600))
+			configPath := filepath.Join(dir, "config.yaml")
+			require.NoError(t, os.WriteFile(configPath, []byte(fmt.Sprintf("\"database\":\n  \"type\": \"sqlite\"\n  \"dsn\": %q\n", filepath.ToSlash(path))), 0600))
 			t.Setenv("PODSYNC_CONFIG_PATH", configPath)
 			args := []string{"init-db"}
 			switch name {
 			case "config before command":
-				t.Setenv("PODSYNC_CONFIG_PATH", "missing.toml")
+				t.Setenv("PODSYNC_CONFIG_PATH", "missing.yaml")
 				args = []string{"-c", configPath, "init-db"}
 			case "direct DSN":
-				t.Setenv("PODSYNC_CONFIG_PATH", "missing.toml")
+				t.Setenv("PODSYNC_CONFIG_PATH", "missing.yaml")
 				args = []string{"init-db", "--type", "sqlite", "--dsn", path}
 			}
 			cmd := newRootCommand(runService)

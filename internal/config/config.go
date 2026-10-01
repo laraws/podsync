@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -8,85 +8,28 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 
-	"github.com/mxpv/podsync/pkg/db"
-	"github.com/mxpv/podsync/pkg/feed"
-	"github.com/mxpv/podsync/pkg/fs"
 	"github.com/mxpv/podsync/pkg/model"
-	"github.com/mxpv/podsync/pkg/ytdl"
-	"github.com/mxpv/podsync/services/web"
 )
 
-type Config struct {
-	// Server is the web server configuration
-	Server web.Config `mapstructure:"server"`
-	// S3 is the optional configuration for S3-compatible storage provider
-	Storage fs.Config `mapstructure:"storage"`
-	// Log is the optional logging configuration
-	Log Log `mapstructure:"log"`
-	// Database configuration
-	Database db.Config `mapstructure:"database"`
-	// Feeds is a list of feeds to host by this app.
-	// ID will be used as feed ID in http://podsync.net/{FEED_ID}.xml
-	Feeds map[string]*feed.Config `mapstructure:"feeds"`
-	// Tokens is API keys to use to access YouTube/Vimeo APIs.
-	Tokens map[model.Provider][]string `mapstructure:"tokens"`
-	// Downloader (youtube-dl) configuration
-	Downloader ytdl.Config `mapstructure:"downloader"`
-	// Global cleanup policy applied to feeds that don't specify their own cleanup policy
-	Cleanup *feed.Cleanup `mapstructure:"cleanup"`
-}
-
-type Log struct {
-	// Dir enables daily log files named YYYY-MM-DD.log, using local time.
-	// When set, it takes precedence over the legacy filename rotation settings.
-	Dir string `mapstructure:"dir"`
-	// Filename to write the log to (instead of stdout)
-	Filename string `mapstructure:"filename"`
-	// MaxSize is the maximum size of the log file in MB
-	MaxSize int `mapstructure:"max_size"`
-	// MaxBackups is the maximum number of log file backups to keep after rotation
-	MaxBackups int `mapstructure:"max_backups"`
-	// MaxAge is the maximum number of days to keep the logs for
-	MaxAge int `mapstructure:"max_age"`
-	// Compress old backups
-	Compress bool `mapstructure:"compress"`
-	// Debug mode
-	Debug bool `mapstructure:"debug"`
-}
-
-// LoadConfig loads TOML configuration from a file path
+// LoadConfig loads YAML configuration from a file path
 func LoadConfig(path string) (*Config, error) {
-	return newConfigReader().load(path)
+	return NewReader().Load(path)
 }
 
 // LoadDatabaseConfig reads only the database section. It is used by init-db,
 // which should not require feeds, storage, downloader, or server settings.
-func LoadDatabaseConfig(path string) (*db.Config, error) {
-	return newConfigReader().loadDatabase(path)
+func LoadDatabaseConfig(path string) (*Database, error) {
+	return NewReader().LoadDatabase(path)
 }
 
 func (c *Config) validate() error {
 	var result *multierror.Error
 
-	if c.Server.DataDir != "" {
-		log.Warnf(`server.data_dir is deprecated, and will be removed in a future release. Use the following config instead:
-
-[storage]
-  [storage.local]
-  data_dir = "%s"
-
-`, c.Server.DataDir)
-		if c.Storage.Local.DataDir == "" {
-			c.Storage.Local.DataDir = c.Server.DataDir
-		}
-	}
-
 	if c.Server.Path != "" {
-		var pathReg = regexp.MustCompile(model.PathRegex)
+		var pathReg = regexp.MustCompile(PathRegex)
 		if !pathReg.MatchString(c.Server.Path) {
-			result = multierror.Append(result, errors.Errorf("Server handle path must be match %s or empty", model.PathRegex))
+			result = multierror.Append(result, errors.Errorf("Server handle path must be match %s or empty", PathRegex))
 		}
 	}
 
@@ -151,13 +94,13 @@ func (c *Config) applyDefaults(configPath string) {
 
 	if c.Log.Filename != "" {
 		if c.Log.MaxSize == 0 {
-			c.Log.MaxSize = model.DefaultLogMaxSize
+			c.Log.MaxSize = DefaultLogMaxSize
 		}
 		if c.Log.MaxAge == 0 {
-			c.Log.MaxAge = model.DefaultLogMaxAge
+			c.Log.MaxAge = DefaultLogMaxAge
 		}
 		if c.Log.MaxBackups == 0 {
-			c.Log.MaxBackups = model.DefaultLogMaxBackups
+			c.Log.MaxBackups = DefaultLogMaxBackups
 		}
 	}
 
@@ -165,23 +108,23 @@ func (c *Config) applyDefaults(configPath string) {
 
 	for _, _feed := range c.Feeds {
 		if _feed.UpdatePeriod == 0 {
-			_feed.UpdatePeriod = model.DefaultUpdatePeriod
+			_feed.UpdatePeriod = DefaultUpdatePeriod
 		}
 
 		if _feed.Quality == "" {
-			_feed.Quality = model.DefaultQuality
+			_feed.Quality = DefaultQuality
 		}
 
 		if _feed.Custom.CoverArtQuality == "" {
-			_feed.Custom.CoverArtQuality = model.DefaultQuality
+			_feed.Custom.CoverArtQuality = DefaultQuality
 		}
 
 		if _feed.Format == "" {
-			_feed.Format = model.DefaultFormat
+			_feed.Format = DefaultFormat
 		}
 
 		if _feed.PageSize == 0 {
-			_feed.PageSize = model.DefaultPageSize
+			_feed.PageSize = DefaultPageSize
 		}
 
 		if _feed.PlaylistSort == "" {
@@ -195,7 +138,7 @@ func (c *Config) applyDefaults(configPath string) {
 	}
 }
 
-func applyDatabaseDefaults(config *db.Config, configPath string) {
+func applyDatabaseDefaults(config *Database, configPath string) {
 	if config.Type == "" {
 		config.Type = "sqlite"
 	}

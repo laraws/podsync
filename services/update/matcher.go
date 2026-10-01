@@ -4,9 +4,10 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/mxpv/podsync/pkg/feed"
-	"github.com/mxpv/podsync/pkg/model"
 	log "github.com/sirupsen/logrus"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/pkg/model"
 )
 
 func matchRegexpFilter(pattern, str string, negative bool, logger log.FieldLogger) bool {
@@ -24,7 +25,7 @@ func matchRegexpFilter(pattern, str string, negative bool, logger log.FieldLogge
 	return true
 }
 
-func matchFilters(episode *model.Episode, filters *feed.Filters) bool {
+func matchFilters(episode *model.Episode, filters *appconfig.Filters) bool {
 	logger := log.WithFields(log.Fields{"episode_id": episode.ID})
 	if !matchRegexpFilter(filters.Title, episode.Title, false, logger.WithField("filter", "title")) {
 		return false

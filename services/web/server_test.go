@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
 )
 
 type mockFileSystem struct{}
@@ -16,7 +18,7 @@ func (m *mockFileSystem) Open(name string) (http.File, error) {
 }
 
 func TestDebugEndpointDisabledByDefault(t *testing.T) {
-	cfg := Config{
+	cfg := appconfig.Server{
 		Port: 8080,
 		Path: "feeds",
 	}
@@ -35,7 +37,7 @@ func TestDebugEndpointDisabledByDefault(t *testing.T) {
 }
 
 func TestDebugEndpointEnabledWhenConfigured(t *testing.T) {
-	cfg := Config{
+	cfg := appconfig.Server{
 		Port:           8080,
 		Path:           "feeds",
 		DebugEndpoints: true,

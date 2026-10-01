@@ -164,25 +164,23 @@ Resources:
           export publichost=$(ec2-metadata --public-hostname | cut -d ' ' -f2)
           # Create configuration file
           mkdir -p /home/ec2-user/podsync/data
-          tee /home/ec2-user/podsync/config.toml <<EOF
-          [server]
-          port = ${PodsyncPort}
-          hostname = "http://$publichost:${PodsyncPort}"
-          
-          [storage]
-            [storage.local]
-            data_dir = "/home/ec2-user/podsync/data"
-
-          [tokens]
-          youtube = "${YouTubeApiKey}"
-          vimeo = "${VimeoAccessToken}"
-
-          [feeds]
-            [feeds.${FeedId}]
-            url = "${FeedUrl}"
-            page_size = ${PageSize}
-            quality = "${Quality}"
-            format = "${Format}"
+          tee /home/ec2-user/podsync/config.yaml <<EOF
+          server:
+            port: ${PodsyncPort}
+            hostname: "http://$publichost:${PodsyncPort}"
+          storage:
+            type: local
+            local:
+              data_dir: /app/data
+          tokens:
+            youtube: "${YouTubeApiKey}"
+            vimeo: "${VimeoAccessToken}"
+          feeds:
+            "${FeedId}":
+              url: "${FeedUrl}"
+              page_size: ${PageSize}
+              quality: "${Quality}"
+              format: "${Format}"
           EOF
 
           # Pull image and run CLI
@@ -190,7 +188,7 @@ Resources:
           docker run -d \
             -p ${PodsyncPort}:${PodsyncPort} \
             -v /home/ec2-user/podsync/data:/app/data \
-            -v /home/ec2-user/podsync/config.toml:/app/config.toml \
+            -v /home/ec2-user/podsync/config.yaml:/app/config.yaml \
             --restart always \
             mxpv/podsync:${PodsyncVersion}
 
