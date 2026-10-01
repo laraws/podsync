@@ -3,13 +3,10 @@ package main
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/hashicorp/go-multierror"
-	"github.com/pelletier/go-toml"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 
@@ -23,83 +20,51 @@ import (
 
 type Config struct {
 	// Server is the web server configuration
-	Server web.Config `toml:"server"`
+	Server web.Config `mapstructure:"server"`
 	// S3 is the optional configuration for S3-compatible storage provider
-	Storage fs.Config `toml:"storage"`
+	Storage fs.Config `mapstructure:"storage"`
 	// Log is the optional logging configuration
-	Log Log `toml:"log"`
+	Log Log `mapstructure:"log"`
 	// Database configuration
-	Database db.Config `toml:"database"`
+	Database db.Config `mapstructure:"database"`
 	// Feeds is a list of feeds to host by this app.
 	// ID will be used as feed ID in http://podsync.net/{FEED_ID}.xml
-	Feeds map[string]*feed.Config
+	Feeds map[string]*feed.Config `mapstructure:"feeds"`
 	// Tokens is API keys to use to access YouTube/Vimeo APIs.
-	Tokens map[model.Provider]StringSlice `toml:"tokens"`
+	Tokens map[model.Provider][]string `mapstructure:"tokens"`
 	// Downloader (youtube-dl) configuration
-	Downloader ytdl.Config `toml:"downloader"`
+	Downloader ytdl.Config `mapstructure:"downloader"`
 	// Global cleanup policy applied to feeds that don't specify their own cleanup policy
-	Cleanup *feed.Cleanup `toml:"cleanup"`
+	Cleanup *feed.Cleanup `mapstructure:"cleanup"`
 }
 
 type Log struct {
 	// Dir enables daily log files named YYYY-MM-DD.log, using local time.
 	// When set, it takes precedence over the legacy filename rotation settings.
-	Dir string `toml:"dir"`
+	Dir string `mapstructure:"dir"`
 	// Filename to write the log to (instead of stdout)
-	Filename string `toml:"filename"`
+	Filename string `mapstructure:"filename"`
 	// MaxSize is the maximum size of the log file in MB
-	MaxSize int `toml:"max_size"`
+	MaxSize int `mapstructure:"max_size"`
 	// MaxBackups is the maximum number of log file backups to keep after rotation
-	MaxBackups int `toml:"max_backups"`
+	MaxBackups int `mapstructure:"max_backups"`
 	// MaxAge is the maximum number of days to keep the logs for
-	MaxAge int `toml:"max_age"`
+	MaxAge int `mapstructure:"max_age"`
 	// Compress old backups
-	Compress bool `toml:"compress"`
+	Compress bool `mapstructure:"compress"`
 	// Debug mode
-	Debug bool `toml:"debug"`
+	Debug bool `mapstructure:"debug"`
 }
 
 // LoadConfig loads TOML configuration from a file path
 func LoadConfig(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read config file: %s", path)
-	}
-
-	config := Config{}
-	if err := toml.Unmarshal(data, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal toml")
-	}
-
-	for id, f := range config.Feeds {
-		f.ID = id
-	}
-
-	config.applyDefaults(path)
-	config.applyEnv()
-
-	if err := config.validate(); err != nil {
-		return nil, err
-	}
-
-	return &config, nil
+	return newConfigReader().load(path)
 }
 
 // LoadDatabaseConfig reads only the database section. It is used by init-db,
 // which should not require feeds, storage, downloader, or server settings.
 func LoadDatabaseConfig(path string) (*db.Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to read config file: %s", path)
-	}
-	var config struct {
-		Database db.Config `toml:"database"`
-	}
-	if err := toml.Unmarshal(data, &config); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal toml")
-	}
-	applyDatabaseDefaults(&config.Database, path)
-	return &config.Database, nil
+	return newConfigReader().loadDatabase(path)
 }
 
 func (c *Config) validate() error {
@@ -240,55 +205,4 @@ func applyDatabaseDefaults(config *db.Config, configPath string) {
 		}
 		config.DSN = filepath.Join(config.Dir, "podsync.db")
 	}
-}
-
-func (c *Config) applyEnv() {
-	envVars := map[model.Provider]string{
-		model.ProviderYoutube:    "PODSYNC_YOUTUBE_API_KEY",
-		model.ProviderVimeo:      "PODSYNC_VIMEO_API_KEY",
-		model.ProviderSoundcloud: "PODSYNC_SOUNDCLOUD_API_KEY",
-		model.ProviderTwitch:     "PODSYNC_TWITCH_API_KEY",
-	}
-
-	// Replace API keys from config with environment variables
-	for provider, envVar := range envVars {
-		val, ok := os.LookupEnv(envVar)
-		if ok {
-			log.Infof("Found %s environment variable, replacing config token with it", envVar)
-			// If no tokens are provided in the config.toml, we need to create a new map
-			if c.Tokens == nil {
-				c.Tokens = make(map[model.Provider]StringSlice)
-			}
-			// Support multiple keys separated by spaces for API key rotation
-			keys := strings.Fields(val)
-			c.Tokens[provider] = keys
-		}
-	}
-
-	r2Env := map[string]*string{
-		"PODSYNC_R2_ENDPOINT_URL":      &c.Storage.R2.EndpointURL,
-		"PODSYNC_R2_ACCESS_KEY_ID":     &c.Storage.R2.AccessKeyID,
-		"PODSYNC_R2_SECRET_ACCESS_KEY": &c.Storage.R2.SecretAccessKey,
-		"PODSYNC_R2_BUCKET":            &c.Storage.R2.Bucket,
-		"PODSYNC_R2_PUBLIC_URL":        &c.Storage.R2.PublicURL,
-	}
-	for envVar, target := range r2Env {
-		if value, ok := os.LookupEnv(envVar); ok {
-			*target = value
-			log.Infof("Found %s environment variable, replacing R2 configuration value", envVar)
-		}
-	}
-}
-
-// StringSlice is a toml extension that lets you to specify either a string
-// value (a slice with just one element) or a string slice.
-type StringSlice []string
-
-func (s *StringSlice) UnmarshalTOML(v interface{}) error {
-	if str, ok := v.(string); ok {
-		*s = []string{str}
-		return nil
-	}
-
-	return errors.New("failed to decode string slice field")
 }

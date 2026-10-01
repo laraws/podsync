@@ -25,11 +25,11 @@ type ExecHook struct {
 	// Command is the command and arguments to execute.
 	// For single commands, use shell parsing: ["echo hello"]
 	// For multiple args, pass directly: ["curl", "-X", "POST", "url"]
-	Command []string `toml:"command"`
+	Command []string `mapstructure:"command"`
 
 	// Timeout in seconds for command execution.
 	// If 0 or unset, defaults to 60 seconds.
-	Timeout int `toml:"timeout"`
+	Timeout int `mapstructure:"timeout"`
 }
 
 // Invoke executes the hook command with the provided environment variables.

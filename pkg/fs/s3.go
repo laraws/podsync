@@ -24,14 +24,14 @@ import (
 // S3Config is the configuration for an S3-compatible storage provider.
 // Credentials may be omitted to use the standard AWS credential chain.
 type S3Config struct {
-	Bucket          string `toml:"bucket"`
-	Region          string `toml:"region"`
-	EndpointURL     string `toml:"endpoint_url"`
-	Prefix          string `toml:"prefix"`
-	PublicURL       string `toml:"public_url"`
-	AccessKeyID     string `toml:"access_key_id"`
-	SecretAccessKey string `toml:"secret_access_key"`
-	UsePathStyle    bool   `toml:"use_path_style"`
+	Bucket          string `mapstructure:"bucket"`
+	Region          string `mapstructure:"region"`
+	EndpointURL     string `mapstructure:"endpoint_url"`
+	Prefix          string `mapstructure:"prefix"`
+	PublicURL       string `mapstructure:"public_url"`
+	AccessKeyID     string `mapstructure:"access_key_id"`
+	SecretAccessKey string `mapstructure:"secret_access_key"`
+	UsePathStyle    bool   `mapstructure:"use_path_style"`
 }
 
 // R2Config is separate in TOML so selecting R2 is explicit while the

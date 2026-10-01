@@ -36,6 +36,8 @@ func TestCLIServiceCommands(t *testing.T) {
 			cancel()
 			cmd := newRootCommand(func(gotCtx context.Context, opts serviceOptions) error {
 				called = true
+				require.NotNil(t, opts.reader)
+				opts.reader = nil
 				assert.Equal(t, test.want, opts)
 				assert.ErrorIs(t, gotCtx.Err(), context.Canceled)
 				return nil

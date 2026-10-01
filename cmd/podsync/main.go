@@ -29,6 +29,7 @@ type serviceOptions struct {
 	RunOnce    bool
 	Debug      bool
 	NoBanner   bool
+	reader     *configReader
 }
 
 const banner = `
@@ -82,7 +83,11 @@ func runService(ctx context.Context, opts serviceOptions) error {
 
 	// Load TOML file
 	log.Debugf("loading configuration %q", opts.ConfigPath)
-	cfg, err := LoadConfig(opts.ConfigPath)
+	reader := opts.reader
+	if reader == nil {
+		reader = newConfigReader()
+	}
+	cfg, err := reader.load(opts.ConfigPath)
 	if err != nil {
 		return fmt.Errorf("failed to load configuration file: %w", err)
 	}

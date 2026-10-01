@@ -60,6 +60,19 @@ PODSYNC_CONFIG_PATH=config.local-mysql.toml ./bin/podsync serve --no-banner
 
 显式 `--config` 优先于 `PODSYNC_CONFIG_PATH`；二者都没有时读取工作目录中的 `config.toml`。相对存储、cookies 和下载器路径以进程工作目录为准。
 
+配置由 Viper 读取，优先级为：**显式命令行参数 > 环境变量 > TOML > 默认值**。例如 `--debug=false` 可以覆盖文件里的 `log.debug = true`。数据库、存储、HTTP、日志和下载器等静态字段支持 `PODSYNC_` 前缀环境变量，层级用下划线连接；feed 列表在 TOML 中配置。
+
+```bash
+PODSYNC_SERVER_PORT=9090 \
+PODSYNC_SERVER_HOSTNAME=http://localhost:9090 \
+PODSYNC_LOG_DIR=log \
+./bin/podsync serve -c config.local-mysql.toml --debug=false
+```
+
+常用变量还包括 `PODSYNC_DATABASE_TYPE`、`PODSYNC_DATABASE_DSN`、`PODSYNC_STORAGE_LOCAL_DATA_DIR` 和 `PODSYNC_DOWNLOADER_CUSTOM_BINARY`。原有的 API Key 和 R2 命名变量也由 Viper 读取；R2 命名变量优先于通用层级命名。已设置为空字符串的环境变量会覆盖文件值。
+
+修改配置后需重启服务。feed ID 保留大小写，因此 `PK1` 的数据库标识和 RSS 地址不会被转成 `pk1`。TOML 使用严格语法解析，同一表中不能重复定义相同键。
+
 切换到 local 不会自动迁移 R2 中的历史文件。数据库中原有的下载记录仍然保留，后续同步时缺失的本地媒体可能被重新下载。`page_size = 1` 是 API 查询页大小，不保证一次同步总共只下载一个节目。
 
 ## 2. 源码运行

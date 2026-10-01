@@ -2,18 +2,21 @@ package main
 
 import (
 	"context"
-	"os"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 func newRootCommand(run func(context.Context, serviceOptions) error) *cobra.Command {
-	configPath, ok := os.LookupEnv("PODSYNC_CONFIG_PATH")
-	if !ok {
-		configPath = "config.toml"
+	reader := newConfigReader()
+	options := func() serviceOptions {
+		return serviceOptions{
+			ConfigPath: reader.v.GetString("config"),
+			Debug:      reader.v.GetBool("log.debug"),
+			NoBanner:   reader.v.GetBool("no-banner"),
+			reader:     reader,
+		}
 	}
-	opts := serviceOptions{}
 	cliVersion := version
 	if cliVersion == "" {
 		cliVersion = "dev"
@@ -30,11 +33,14 @@ func newRootCommand(run func(context.Context, serviceOptions) error) *cobra.Comm
 		},
 		Example: "  podsync serve -c config.local-mysql.toml\n  podsync update -c config.local-mysql.toml\n  podsync init-db -c config.local-mysql.toml",
 	}
-	cmd.PersistentFlags().StringVarP(&opts.ConfigPath, "config", "c", configPath, "Configuration file (default from PODSYNC_CONFIG_PATH, otherwise config.toml)")
-	cmd.PersistentFlags().BoolVar(&opts.Debug, "debug", false, "Enable debug logging")
-	cmd.PersistentFlags().BoolVar(&opts.NoBanner, "no-banner", false, "Hide the startup banner")
+	cmd.PersistentFlags().StringP("config", "c", "config.toml", "Configuration file (PODSYNC_CONFIG_PATH overrides the default)")
+	cmd.PersistentFlags().Bool("debug", false, "Enable debug logging (overrides log.debug)")
+	cmd.PersistentFlags().Bool("no-banner", false, "Hide the startup banner")
+	_ = reader.v.BindPFlag("config", cmd.PersistentFlags().Lookup("config"))
+	_ = reader.v.BindPFlag("log.debug", cmd.PersistentFlags().Lookup("debug"))
+	_ = reader.v.BindPFlag("no-banner", cmd.PersistentFlags().Lookup("no-banner"))
 	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		if opts.Debug {
+		if reader.v.GetBool("log.debug") {
 			log.SetLevel(log.DebugLevel)
 		}
 	}
@@ -43,7 +49,7 @@ func newRootCommand(run func(context.Context, serviceOptions) error) *cobra.Comm
 		Short: "Run the feed scheduler and HTTP server for local storage",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), opts)
+			return run(cmd.Context(), options())
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -51,12 +57,12 @@ func newRootCommand(run func(context.Context, serviceOptions) error) *cobra.Comm
 		Short: "Update all configured feeds once and exit",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			updateOpts := opts
+			updateOpts := options()
 			updateOpts.RunOnce = true
 			return run(cmd.Context(), updateOpts)
 		},
 	})
-	cmd.AddCommand(newInitDBCommand(&opts.ConfigPath))
+	cmd.AddCommand(newInitDBCommand(reader))
 	cmd.MarkPersistentFlagFilename("config", "toml")
 	return cmd
 }

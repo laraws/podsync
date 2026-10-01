@@ -29,8 +29,8 @@ type Storage interface {
 // Config is a configuration for the file storage backend
 type Config struct {
 	// Type is the type of file system to use
-	Type  string      `toml:"type"`
-	Local LocalConfig `toml:"local"`
-	S3    S3Config    `toml:"s3"`
-	R2    R2Config    `toml:"r2"`
+	Type  string      `mapstructure:"type"`
+	Local LocalConfig `mapstructure:"local"`
+	S3    S3Config    `mapstructure:"s3"`
+	R2    R2Config    `mapstructure:"r2"`
 }

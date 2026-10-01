@@ -51,11 +51,11 @@ var (
 // Config is a youtube-dl related configuration
 type Config struct {
 	// SelfUpdate toggles self update every 24 hour
-	SelfUpdate bool `toml:"self_update"`
+	SelfUpdate bool `mapstructure:"self_update"`
 	// Timeout in minutes for youtube-dl process to finish download
-	Timeout int `toml:"timeout"`
+	Timeout int `mapstructure:"timeout"`
 	// CustomBinary is a custom path to youtube-dl, this allows using various youtube-dl forks.
-	CustomBinary string `toml:"custom_binary"`
+	CustomBinary string `mapstructure:"custom_binary"`
 }
 
 type YoutubeDl struct {

@@ -72,6 +72,8 @@ In order to query YouTube or Vimeo API you have to obtain an API token first.
 You need to create a configuration file (for instance `config.toml`) and specify the list of feeds that you're going to host.
 See [config.toml.example](./config.toml.example) for all possible configuration keys available in Podsync.
 
+Configuration is loaded through Viper. Precedence is explicit CLI flags, environment variables, TOML values, then defaults. Feed identifiers retain their original case. TOML syntax is checked strictly, including duplicate keys.
+
 Minimal configuration would look like this:
 
 ```toml
@@ -126,9 +128,17 @@ Set the credentials with `PODSYNC_R2_ACCESS_KEY_ID` and `PODSYNC_R2_SECRET_ACCES
 
 Podsync supports the following environment variables for configuration and API keys:
 
+Static configuration fields also support `PODSYNC_` environment variables with dots replaced by underscores, such as `PODSYNC_SERVER_PORT`, `PODSYNC_DATABASE_DSN`, and `PODSYNC_LOG_DIR`. Dynamic feed entries are configured in TOML. The named API key and R2 variables below take priority over their generic names where both are supported. Empty environment values override file values.
+
 | Variable Name                | Description                                                                               | Example Value(s)                              |
 |------------------------------|-------------------------------------------------------------------------------------------|-----------------------------------------------|
 | `PODSYNC_CONFIG_PATH`        | Default configuration file path when `--config` is not specified                         | `/app/config.toml`                            |
+| `PODSYNC_DATABASE_TYPE`      | Database driver                                                                        | `sqlite` or `mysql`                           |
+| `PODSYNC_DATABASE_DSN`       | Database connection string                                                             | `user:password@tcp(host:3306)/podsync?tls=true` |
+| `PODSYNC_SERVER_PORT`        | HTTP server port                                                                       | `8080`                                       |
+| `PODSYNC_LOG_DIR`            | Directory for daily YYYY-MM-DD.log files                                                | `log`                                        |
+| `PODSYNC_LOG_DEBUG`          | Debug logging; overridden by explicit `--debug` or `--debug=false`                       | `true`                                       |
+| `PODSYNC_NO_BANNER`          | Hide the startup banner                                                                | `true`                                       |
 | `PODSYNC_YOUTUBE_API_KEY`    | YouTube API key(s), space-separated for rotation                                          | `key1` or `key1 key2 key3` |
 | `PODSYNC_VIMEO_API_KEY`      | Vimeo API key(s), space-separated for rotation                                            | `key1` or `key1 key2`        |
 | `PODSYNC_SOUNDCLOUD_API_KEY` | SoundCloud API key(s), space-separated for rotation                                       | `soundcloud_key1 soundcloud_key2`             |

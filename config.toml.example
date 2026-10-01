@@ -151,7 +151,6 @@ vimeo = [ # Multiple keys will be rotated.
   subcategories = ["Documentary", "Tech News"]
   explicit = true
   lang = "en"
-  author = "Mrs. Smith (mrs@smith.org)"
   ownerName = "Mrs. Smith"
   ownerEmail = "mrs@smith.org"
   # optional: this will override the default link (usually the URL address) in the generated RSS feed with another link

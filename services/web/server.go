@@ -20,28 +20,28 @@ type Server struct {
 
 type Config struct {
 	// Hostname to use for download links
-	Hostname string `toml:"hostname"`
+	Hostname string `mapstructure:"hostname"`
 	// Port is a server port to listen to
-	Port int `toml:"port"`
+	Port int `mapstructure:"port"`
 	// Bind a specific IP addresses for server
 	// "*": bind all IP addresses which is default option
 	// localhost or 127.0.0.1  bind a single IPv4 address
-	BindAddress string `toml:"bind_address"`
+	BindAddress string `mapstructure:"bind_address"`
 	// Flag indicating if the server will use TLS
-	TLS bool `toml:"tls"`
+	TLS bool `mapstructure:"tls"`
 	// Path to a certificate file for TLS connections
-	CertificatePath string `toml:"certificate_path"`
+	CertificatePath string `mapstructure:"certificate_path"`
 	// Path to a private key file for TLS connections
-	KeyFilePath string `toml:"key_file_path"`
+	KeyFilePath string `mapstructure:"key_file_path"`
 	// Specify path for reverse proxy and only [A-Za-z0-9]
-	Path string `toml:"path"`
+	Path string `mapstructure:"path"`
 	// DataDir is a path to a directory to keep XML feeds and downloaded episodes,
 	// that will be available to user via web server for download.
-	DataDir string `toml:"data_dir"`
+	DataDir string `mapstructure:"data_dir"`
 	// WebUIEnabled is a flag indicating if web UI is enabled
-	WebUIEnabled bool `toml:"web_ui"`
+	WebUIEnabled bool `mapstructure:"web_ui"`
 	// DebugEndpoints enables /debug/vars endpoint for runtime metrics (disabled by default)
-	DebugEndpoints bool `toml:"debug_endpoints"`
+	DebugEndpoints bool `mapstructure:"debug_endpoints"`
 }
 
 func New(cfg Config, storage http.FileSystem, database db.Storage) *Server {

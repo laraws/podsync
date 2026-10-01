@@ -27,7 +27,7 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 ### Key Dependencies
 - youtube-dl/yt-dlp for media downloading
 - GORM with SQLite/MySQL for database storage
-- go-toml for configuration
+- Cobra for CLI commands and Viper/mapstructure for TOML configuration
 - robfig/cron for scheduling
 - AWS SDK for S3 storage
 
