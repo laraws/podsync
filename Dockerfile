@@ -35,10 +35,9 @@ RUN curl -fsSL https://deno.land/install.sh | sh
 ENV PATH="/root/.deno/bin:${PATH}"
 
 
-# Install stable yt-dlp and EJS challenge solver support
+# Install yt-dlp with its matching EJS challenge solver dependency
 RUN python3 -m pip install --break-system-packages -U \
-        yt-dlp \
-        yt-dlp-ejs
+        "yt-dlp[default]"
 
 
 # Enable yt-dlp EJS remote components

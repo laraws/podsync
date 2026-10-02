@@ -78,7 +78,7 @@ func (u *Updater) downloadEpisodes(ctx context.Context, cfg *config.Feed, episod
 		if result != nil {
 			failures = append(failures, fmt.Errorf("episode %s: %w", episode.ID, result))
 		}
-		if stateErr != nil || errors.Is(attemptErr, downloader.ErrTooManyRequests) {
+		if stateErr != nil || downloader.ShouldStopFeed(attemptErr) {
 			break
 		}
 	}
@@ -115,7 +115,7 @@ func (u *Updater) downloadEpisode(ctx context.Context, cfg *config.Feed, episode
 	return size, nil
 }
 func (u *Updater) notifyEpisode(ctx context.Context, cfg *config.Feed, title string, episode *model.Episode, started time.Time, size int64, downloadErr error) {
-	if u.notifier == nil {
+	if u.notifier == nil || ctx.Err() == context.Canceled {
 		return
 	}
 	result := notify.EpisodeResult{FeedID: cfg.ID, FeedTitle: title, EpisodeID: episode.ID, EpisodeTitle: episode.Title, EpisodeURL: episode.VideoURL, At: time.Now(), Duration: time.Since(started), Size: size, Err: downloadErr}

@@ -19,7 +19,7 @@ import (
 )
 
 type Downloader interface {
-	PlaylistMetadata(ctx context.Context, url string) (metadata downloader.PlaylistMetadata, err error)
+	PlaylistMetadata(ctx context.Context, cfg *appconfig.Feed, url string) (metadata downloader.PlaylistMetadata, err error)
 }
 
 const maxYoutubeResults = 50
@@ -230,7 +230,7 @@ func (yt *YouTubeSource) queryFeed(ctx context.Context, cfg *appconfig.Feed, fee
 		} else { // nolint:golint
 			feed.PubDate = date
 		}
-		metadata, err := yt.downloader.PlaylistMetadata(ctx, feed.ItemURL)
+		metadata, err := yt.downloader.PlaylistMetadata(ctx, cfg, feed.ItemURL)
 		if err != nil {
 			return fmt.Errorf("failed to get playlist metadata for %s: %w", feed.ItemURL, err)
 		}

@@ -173,6 +173,39 @@ storage:
 
 Set the credentials with `PODSYNC_R2_ACCESS_KEY_ID` and `PODSYNC_R2_SECRET_ACCESS_KEY`. Downloaded episode rows persist only the object key; RSS enclosure URLs are assembled from `public_url` at generation time.
 
+### YouTube cookies
+
+When account access is needed, export Netscape-format cookies using the
+[official YouTube cookie guide](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies):
+log in from a new private window, open `https://www.youtube.com/robots.txt` in
+that same tab, export only `youtube.com` cookies, then close the private window.
+Do not reuse that browser session.
+
+Set `youtube_dl_args: ["--cookies", "/app/cookie.txt"]` on the relevant feeds.
+Mount the source as `./cookie.txt:/app/cookie.txt:ro` and restrict host permissions
+with `chmod 600 cookie.txt`. At startup Podsync copies each source to a private
+writable temporary jar, reused for playlist metadata and downloads and removed
+on shutdown. The export is never overwritten and stays outside the media directory.
+Replacing it requires a restart. For Docker use `docker compose restart podsync`;
+restarting the container also remounts an atomically replaced source file.
+If Compose mount settings or the selected image change, recreate the container
+with `docker compose up -d --force-recreate podsync` instead.
+
+yt-dlp failures are classified into readable Chinese reasons and suggestions:
+expired/malformed cookies, login or bot checks, rate limits, access restrictions,
+unavailable content or formats, JavaScript challenge failures, network/timeouts,
+ffmpeg/postprocessing, disk and argument errors. Unknown failures retain an explicit
+unknown classification. Bot checks and HTTP 403 are not treated as proof of expired cookies.
+
+Telegram includes the explanation and a bounded original-error excerpt. Full stdout,
+stderr and the underlying process error remain in logs and `episodes.last_error`
+(for download attempts), with cookie values and recognized credentials redacted.
+MySQL uses LONGTEXT for long diagnostics; SQLite TEXT has no 64 KB column limit.
+Metadata failures also send one feed notification. Cookie, bot-check, rate-limit,
+network and other shared environment failures stop remaining downloads for the
+current feed round. Content-specific failures permit other episodes to continue;
+the next scheduled round may retry. Normal shutdown cancellation sends no failure alert.
+
 ### Telegram episode notifications
 
 Use a Telegram bot to receive one MarkdownV2 message per episode download attempt. Messages include completion time with timezone, feed and episode titles/IDs, elapsed time, source URL, and either file size or a failure reason. Titles use the feed's custom title when configured. Existing files and filtered/skipped episodes do not generate notifications.

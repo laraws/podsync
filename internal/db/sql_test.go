@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,4 +132,20 @@ func TestMySQLDSNEnablesTimeParsing(t *testing.T) {
 	dsn, err := mysqlDSN("user:password@tcp(localhost:3306)/podsync?charset=utf8mb4")
 	require.NoError(t, err)
 	assert.Contains(t, dsn, "parseTime=true")
+}
+
+func TestLongOriginalErrorRoundTrip(t *testing.T) {
+	database := newTestSQL(t)
+	ctx := context.Background()
+	require.NoError(t, database.SyncFeed(ctx, "f", &model.Feed{Episodes: []*model.Episode{{ID: "failed"}}}))
+	diagnostic := strings.Repeat("WARNING: 原始错误详情 🎧\n", 5000) + "ERROR: terminal download failure"
+	require.Greater(t, len(diagnostic), 65535)
+	require.NoError(t, database.UpdateEpisode(ctx, "f", "failed", func(e *model.Episode) error {
+		e.Status = model.EpisodeError
+		e.LastError = diagnostic
+		return nil
+	}))
+	episode, err := database.GetEpisode(ctx, "f", "failed")
+	require.NoError(t, err)
+	assert.Equal(t, diagnostic, episode.LastError)
 }

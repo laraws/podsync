@@ -10,6 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/downloader"
 	"github.com/mxpv/podsync/internal/model"
 	"github.com/mxpv/podsync/internal/notify"
 	"github.com/mxpv/podsync/internal/storage"
@@ -57,6 +58,17 @@ func (u *Updater) Update(ctx context.Context, cfg *config.Feed) error {
 	started := time.Now()
 	log.WithField("feed_id", cfg.ID).Infof("updating %s", cfg.URL)
 	if err := u.updateFeed(ctx, cfg); err != nil {
+		var failure *downloader.Failure
+		if (errors.As(err, &failure) || errors.Is(err, downloader.ErrCookiesInvalid) || errors.Is(err, downloader.ErrTooManyRequests)) && u.notifier != nil && ctx.Err() != context.Canceled {
+			title := cfg.Custom.Title
+			if title == "" {
+				title = cfg.ID
+			}
+			result := notify.EpisodeResult{FeedID: cfg.ID, FeedTitle: title, EpisodeURL: cfg.URL, At: time.Now(), Duration: time.Since(started), Err: err}
+			if notifyErr := u.notifier.NotifyEpisode(context.WithoutCancel(ctx), result); notifyErr != nil {
+				log.WithError(notifyErr).WithField("feed_id", cfg.ID).Error("feed notification failed")
+			}
+		}
 		return err
 	}
 	episodes, err := u.fetchEpisodes(ctx, cfg)

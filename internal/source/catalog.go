@@ -46,9 +46,10 @@ func (c *Catalog) Fetch(ctx context.Context, cfg *config.Feed) (*model.Feed, err
 	defer cancel()
 	provider, err := newProvider(ctx, info.Provider, key, c.metadata)
 	if err != nil {
-		return nil, err
+		return nil, redactCredential(err, key)
 	}
-	return provider.Fetch(ctx, cfg)
+	feed, err := provider.Fetch(ctx, cfg)
+	return feed, redactCredential(err, key)
 }
 
 // ValidateFeeds fails before scheduling rather than repeating configuration errors.

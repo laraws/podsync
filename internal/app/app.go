@@ -52,6 +52,15 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 		return fmt.Errorf("yt-dlp error: %w", err)
 	}
 
+	defer func() {
+		if err := downloads.Close(); err != nil {
+			log.WithError(err).Error("failed to remove private cookies")
+		}
+	}()
+	if err := downloads.PrepareCookies(cfg.Feeds); err != nil {
+		return err
+	}
+
 	database, err := db.New(ctx, &cfg.Database)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)

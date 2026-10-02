@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/downloader"
 )
 
 func testTelegram(t *testing.T, timeout time.Duration, handler http.HandlerFunc) *Telegram {
@@ -135,4 +136,57 @@ func TestTelegramDisabled(t *testing.T) {
 	require.NoError(t, notifier.NotifyEpisode(context.Background(), EpisodeResult{}))
 	_, err = NewTelegram(config.Telegram{Enabled: true})
 	require.Error(t, err)
+}
+
+func TestFeedFailureNotification(t *testing.T) {
+	notifier := testTelegram(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseMultipartForm(65536))
+		text := r.FormValue("text")
+		assert.Contains(t, text, "Feed 更新失败")
+		assert.Contains(t, text, "重新导出 cookie")
+		assert.NotContains(t, text, "Episode ID")
+		assert.NotContains(t, text, "文件大小")
+		fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+	})
+	require.NoError(t, notifier.NotifyEpisode(context.Background(), EpisodeResult{FeedID: "f", FeedTitle: "Feed", Err: errors.New("重新导出 cookie")}))
+}
+
+func TestTelegramReadableAndOriginalError(t *testing.T) {
+	failure := &downloader.Failure{
+		Kind:       downloader.FailureCookiesExpired,
+		Reason:     "YouTube cookie 已失效或被轮换",
+		Suggestion: "重新导出 cookie.txt，然后重启 Podsync 容器",
+		Output:     "WARNING: The provided YouTube account cookies are no longer valid\nERROR: Sign in to confirm you're not a bot; 123:fake-secret",
+		Cause:      errors.New("exit status 1"),
+	}
+	notifier := testTelegram(t, time.Second, func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseMultipartForm(65536))
+		text := r.FormValue("text")
+		assert.Contains(t, text, "YouTube cookie 已失效或被轮换")
+		assert.Contains(t, text, "处理建议：重新导出")
+		assert.Contains(t, text, "原始错误")
+		assert.Contains(t, text, "ERROR: Sign in to confirm you're not a bot")
+		assert.Contains(t, text, "YouTube account cookies are no longer valid")
+		assert.NotContains(t, text, "fake-secret")
+		assert.Contains(t, text, "database offline")
+		fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+	})
+	err := errors.Join(fmt.Errorf("playlist metadata: %w", failure), errors.New("database offline"))
+	require.NoError(t, notifier.NotifyEpisode(context.Background(), EpisodeResult{FeedID: "f", Err: err}))
+}
+
+func TestDetailedErrorMessageBoundsAndExcerpt(t *testing.T) {
+	raw := strings.Repeat("[download] progress\n", 5000) + "ERROR: " + strings.Repeat("原因😀_*", 3000)
+	failure := &downloader.Failure{Reason: strings.Repeat("原因😀", 3000), Suggestion: strings.Repeat("建议😀", 3000), Output: raw, Cause: errors.New("exit status 1")}
+	result := EpisodeResult{FeedTitle: strings.Repeat("😀_*", 3000), FeedID: strings.Repeat("a", 3000), EpisodeTitle: strings.Repeat("中文", 3000), EpisodeID: strings.Repeat("b", 3000), EpisodeURL: strings.Repeat("u", 3000), Err: failure}
+	text := episodeMessage(result)
+	assert.True(t, utf8.ValidString(text))
+	plain := strings.NewReplacer(`\`, "", "*", "").Replace(text)
+	assert.LessOrEqual(t, len(utf16.Encode([]rune(plain))), 4096)
+	assert.Contains(t, text, "原始错误")
+	assert.Contains(t, text, "ERROR:")
+	assert.NotContains(t, text, "progress")
+	// Telegram truncation must not change the diagnostic retained by the error.
+	assert.Contains(t, failure.OriginalError(), raw)
+	assert.Contains(t, text, "…")
 }

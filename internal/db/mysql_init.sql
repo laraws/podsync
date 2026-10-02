@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     last_attempt_at DATETIME(6) NULL,
     downloaded_at DATETIME(6) NULL,
     attempts INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT NOT NULL,
+    last_error LONGTEXT NOT NULL,
     PRIMARY KEY (feed_id, id),
     INDEX idx_episodes_feed_date (feed_id, pub_date, id),
     INDEX idx_episodes_failure_time (status, last_attempt_at),

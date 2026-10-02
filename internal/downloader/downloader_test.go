@@ -144,7 +144,7 @@ func TestPlaylistMetadataRejectsInvalidJSON(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "yt-dlp")
 	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\necho not-json\n"), 0700))
 	dl := &YTDLP{path: script, timeout: 10 * time.Second}
-	_, err := dl.PlaylistMetadata(context.Background(), "https://example.com/playlist")
+	_, err := dl.PlaylistMetadata(context.Background(), &appconfig.Feed{}, "https://example.com/playlist")
 	require.ErrorContains(t, err, "decode playlist metadata")
 }
 func TestDownloaderHonorsCancellation(t *testing.T) {

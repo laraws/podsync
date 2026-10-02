@@ -15,7 +15,7 @@ import (
 	"github.com/mxpv/podsync/internal/config"
 )
 
-// EpisodeResult describes one completed download attempt.
+// EpisodeResult describes a download attempt, or a feed failure with no EpisodeID.
 type EpisodeResult struct {
 	FeedID, FeedTitle                   string
 	EpisodeID, EpisodeTitle, EpisodeURL string
@@ -66,7 +66,8 @@ func (t *Telegram) NotifyEpisode(ctx context.Context, result EpisodeResult) erro
 	defer cancel()
 	// SDK errors and download errors may contain the token; never expose it.
 	if result.Err != nil {
-		result.Err = errors.New(t.redact(result.Err.Error()))
+		message, original := errorText(result.Err)
+		result.Err = displayError{message: t.redact(message), original: t.redact(original)}
 	}
 	disablePreview := true
 	params := &bot.SendMessageParams{
@@ -106,6 +107,9 @@ func episodeMessage(r EpisodeResult) string {
 	status := "✅ *Episode 下载成功*"
 	if r.Err != nil {
 		status = "❌ *Episode 下载失败*"
+		if r.EpisodeID == "" {
+			status = "❌ *Feed 更新失败*"
+		}
 	}
 	if r.At.IsZero() {
 		r.At = time.Now()
@@ -117,13 +121,19 @@ func episodeMessage(r EpisodeResult) string {
 	}
 	message := status + field("时间", r.At.Format("2006-01-02 15:04:05 MST -07:00"), 80)
 	message += field("Feed", r.FeedTitle, 256) + field("Feed ID", r.FeedID, 128)
-	message += field("Episode", r.EpisodeTitle, 512) + field("Episode ID", r.EpisodeID, 128)
+	if r.EpisodeID != "" {
+		message += field("Episode", r.EpisodeTitle, 512) + field("Episode ID", r.EpisodeID, 128)
+	}
 	message += field("耗时", r.Duration.Round(time.Millisecond).String(), 64)
 	if r.EpisodeURL != "" {
 		message += field("来源", r.EpisodeURL, 512)
 	}
 	if r.Err != nil {
-		message += field("失败原因", r.Err.Error(), 1400)
+		reason, original := errorText(r.Err)
+		message += field("失败原因", reason, 800)
+		if original != "" {
+			message += field("原始错误", errorExcerpt(original), 1000)
+		}
 	} else {
 		message += field("文件大小", fmt.Sprintf("%d bytes", r.Size), 32)
 	}

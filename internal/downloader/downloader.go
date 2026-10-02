@@ -1,16 +1,14 @@
 package downloader
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -44,14 +42,14 @@ type PlaylistMetadata struct {
 	WebpageURL  string      `json:"webpage_url"`
 }
 
-var (
-	ErrTooManyRequests = errors.New(http.StatusText(http.StatusTooManyRequests))
-)
-
 type YTDLP struct {
-	path       string
-	timeout    time.Duration
-	updateLock sync.Mutex // Don't call yt-dlp while self updating
+	path          string
+	timeout       time.Duration
+	updateLock    sync.Mutex // Serialize downloads, cookie writes and self updates.
+	cookieDir     string
+	cookieFiles   map[string]string
+	cookieSecrets []string
+	closed        bool
 }
 
 func New(ctx context.Context, cfg appconfig.Downloader) (*YTDLP, error) {
@@ -130,35 +128,24 @@ func (dl *YTDLP) Update(ctx context.Context) error {
 	return nil
 }
 
-func (dl *YTDLP) PlaylistMetadata(ctx context.Context, url string) (metadata PlaylistMetadata, err error) {
+func (dl *YTDLP) PlaylistMetadata(ctx context.Context, cfg *appconfig.Feed, url string) (PlaylistMetadata, error) {
 	log.Info("getting playlist metadata for: ", url)
-	args := []string{
-		"--playlist-items", "0",
-		"-J",            // JSON output
-		"-q",            // quiet mode
-		"--no-warnings", // suppress warnings
-		url,
-	}
 	dl.updateLock.Lock()
 	defer dl.updateLock.Unlock()
-	output, err := dl.exec(ctx, args...)
+	args, err := dl.runtimeArgs(metadataArgs(cfg.DownloadArgs))
 	if err != nil {
-		log.WithError(err).Errorf("yt-dlp error: %s", url)
-
-		// YouTube might block host with HTTP Error 429: Too Many Requests
-		if strings.Contains(output, "HTTP Error 429") {
-			return PlaylistMetadata{}, ErrTooManyRequests
-		}
-
-		log.Error(output)
-		return PlaylistMetadata{}, fmt.Errorf("yt-dlp metadata: %s: %w", output, err)
+		return PlaylistMetadata{}, err
 	}
-
-	var playlistMetadata PlaylistMetadata
-	if err := json.Unmarshal([]byte(output), &playlistMetadata); err != nil {
-		return PlaylistMetadata{}, fmt.Errorf("decode playlist metadata: %w", err)
+	args = append(args, "--playlist-items", "0", "-J", "-q", url)
+	output, warnings, err := dl.run(ctx, args...)
+	if err != nil {
+		return PlaylistMetadata{}, dl.failure(output+warnings, err)
 	}
-	return playlistMetadata, nil
+	var metadata PlaylistMetadata
+	if err := json.Unmarshal([]byte(output), &metadata); err != nil {
+		return PlaylistMetadata{}, dl.reportFailure(newFailure(FailureMetadata, "yt-dlp 返回的播放列表信息无法解析", "更新 yt-dlp，并检查播放列表和提取器参数后重试", true, output+warnings, fmt.Errorf("decode playlist metadata: %w", err)))
+	}
+	return metadata, nil
 }
 
 func (dl *YTDLP) Download(ctx context.Context, feedConfig *appconfig.Feed, episode *model.Episode) (r io.ReadCloser, err error) {
@@ -184,18 +171,13 @@ func (dl *YTDLP) Download(ctx context.Context, feedConfig *appconfig.Feed, episo
 	dl.updateLock.Lock()
 	defer dl.updateLock.Unlock()
 
+	args, err = dl.runtimeArgs(args)
+	if err != nil {
+		return nil, err
+	}
 	output, err := dl.exec(ctx, args...)
 	if err != nil {
-		log.WithError(err).Errorf("yt-dlp error: %s", filePath)
-
-		// YouTube might block host with HTTP Error 429: Too Many Requests
-		if strings.Contains(output, "HTTP Error 429") {
-			return nil, ErrTooManyRequests
-		}
-
-		log.Error(output)
-
-		return nil, fmt.Errorf("yt-dlp: %s: %w", output, err)
+		return nil, dl.failure(output, err)
 	}
 
 	ext := feedConfig.EpisodeExtension()
@@ -211,20 +193,27 @@ func (dl *YTDLP) Download(ctx context.Context, feedConfig *appconfig.Feed, episo
 }
 
 func (dl *YTDLP) exec(ctx context.Context, args ...string) (string, error) {
+	stdout, stderr, err := dl.run(ctx, args...)
+	return stdout + stderr, err
+}
+
+// Keep warnings separate from JSON output while preserving them for failures.
+func (dl *YTDLP) run(ctx context.Context, args ...string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, dl.timeout)
 	defer cancel()
-
 	cmd := exec.CommandContext(ctx, dl.path, args...)
 	cmd.WaitDelay = time.Second
-	output, err := cmd.CombinedOutput()
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
 	if err != nil {
 		if ctx.Err() != nil {
-			return string(output), fmt.Errorf("execute yt-dlp: %w", ctx.Err())
+			err = fmt.Errorf("execute yt-dlp: %w", ctx.Err())
+		} else {
+			err = fmt.Errorf("failed to execute yt-dlp: %w", err)
 		}
-		return string(output), fmt.Errorf("failed to execute yt-dlp: %w", err)
 	}
-
-	return string(output), nil
+	return stdout.String(), stderr.String(), err
 }
 
 func buildArgs(feedConfig *appconfig.Feed, episode *model.Episode, outputFilePath string) []string {
