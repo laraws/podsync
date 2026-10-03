@@ -291,6 +291,8 @@ The CLI uses Cobra. Run `podsync serve` for the scheduled service, `podsync upda
 
 Running `podsync` without a subcommand shows help. Single updates return a nonzero exit code if any feed fails.
 
+`init-db` preserves existing data by default. To delete all feed and episode data and recreate the Podsync tables, run `podsync init-db --config config.yaml --reset` (or combine `--reset` with `--type` and `--dsn`). This works with SQLite and MySQL; unrelated tables and downloaded media files are preserved. Existing table structures are not migrated; `--reset` rebuilds them from the current schema.
+
 ### Build and run as binary:
 
 Make sure you have created the file `config.yaml`. Also note the location of the `data_dir`. Depending on the operating system, you may have to choose a different location since `/app/data` might be not writable.

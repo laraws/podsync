@@ -159,7 +159,15 @@ make build
 ./bin/podsync init-db --config config.local-mysql.yaml
 ```
 
-`init-db` 会执行建表和必要的兼容迁移，并非只读连接测试；无需单独执行它才能启动服务。
+`init-db` 默认只创建缺失的表和索引，保留已有数据，不会迁移旧表结构；无需单独执行它才能启动服务。
+
+需要清空并重建 Podsync 表时，显式添加 `--reset`：
+
+```bash
+./bin/podsync init-db --config config.local-mysql.yaml --reset
+```
+
+`--reset` 支持 SQLite 和 MySQL，也可与 `--type`、`--dsn` 一起使用。它会删除并重建 `feeds` 和 `episodes` 表，清除所有订阅及下载状态记录；不删除其他表或已下载的媒体文件。
 
 ## 4. Docker 运行
 

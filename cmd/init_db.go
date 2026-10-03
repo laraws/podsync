@@ -14,6 +14,7 @@ type initDBOpts struct {
 	ConfigPath string
 	Type       string
 	DSN        string
+	Reset      bool
 	reader     *appconfig.Reader
 }
 
@@ -30,6 +31,7 @@ func newInitDBCommand(reader *appconfig.Reader) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&opts.Type, "type", "", "Database type: sqlite or mysql (overrides config)")
 	cmd.Flags().StringVar(&opts.DSN, "dsn", "", "Database DSN (requires --type; overrides config)")
+	cmd.Flags().BoolVar(&opts.Reset, "reset", false, "Drop and recreate Podsync tables, deleting all feed and episode data")
 	_ = reader.BindFlag("database.type", cmd.Flags().Lookup("type"))
 	_ = reader.BindFlag("database.dsn", cmd.Flags().Lookup("dsn"))
 	cmd.MarkFlagsRequiredTogether("type", "dsn")
@@ -68,5 +70,5 @@ func runInitDB(ctx context.Context, opts initDBOpts) error {
 		cfg = *loaded
 	}
 
-	return app.InitDatabase(ctx, cfg)
+	return app.InitDatabase(ctx, cfg, opts.Reset)
 }

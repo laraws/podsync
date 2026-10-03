@@ -11,14 +11,20 @@ import (
 )
 
 // InitDatabase initializes the schema without starting any other service.
-func InitDatabase(ctx context.Context, cfg config.Database) error {
-	database, err := db.New(ctx, &cfg)
+// When reset is true, existing Podsync tables and their data are removed first.
+func InitDatabase(ctx context.Context, cfg config.Database, reset bool) error {
+	open := db.New
+	if reset {
+		log.Warn("resetting database: all feed and episode data will be deleted")
+		open = db.NewWithReset
+	}
+	database, err := open(ctx, &cfg)
 	if err != nil {
 		return err
 	}
 	if err := database.Close(); err != nil {
 		return fmt.Errorf("failed to close database: %w", err)
 	}
-	log.WithField("type", cfg.Type).Info("database schema initialized")
+	log.WithFields(log.Fields{"type": cfg.Type, "reset": reset}).Info("database schema initialized")
 	return nil
 }

@@ -45,6 +45,28 @@ func TestDatabaseSchemaConstraints(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, model.EpisodeNew, episode.Status)
 }
+
+func TestResetSchema(t *testing.T) {
+	database := newTestSQL(t)
+	ctx := context.Background()
+	require.NoError(t, database.SyncFeed(ctx, "feed", &model.Feed{Episodes: []*model.Episode{{ID: "episode"}}}))
+	require.NoError(t, database.db.Exec("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)").Error)
+	require.NoError(t, database.db.Exec("INSERT INTO unrelated (id) VALUES (1)").Error)
+
+	// Repeat to check that resetting an empty schema also works.
+	for range 2 {
+		require.NoError(t, database.resetSchema(ctx))
+		require.NoError(t, database.initSchema(ctx))
+		_, err := database.GetFeed(ctx, "feed")
+		require.ErrorIs(t, err, model.ErrNotFound)
+		_, err = database.GetEpisode(ctx, "feed", "episode")
+		require.ErrorIs(t, err, model.ErrNotFound)
+		var count int64
+		require.NoError(t, database.db.Table("unrelated").Count(&count).Error)
+		require.EqualValues(t, 1, count)
+	}
+	require.NoError(t, database.SyncFeed(ctx, "feed", &model.Feed{Episodes: []*model.Episode{{ID: "episode"}}}))
+}
 func TestSyncPreservesDownloadStateAndRefreshesMetadata(t *testing.T) {
 	ctx := context.Background()
 	database := newTestSQL(t)

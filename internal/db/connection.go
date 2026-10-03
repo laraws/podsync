@@ -26,6 +26,16 @@ type SQL struct {
 
 // New opens the configured SQL database. Schema is initialized from the embedded SQL definitions.
 func New(ctx context.Context, config *appconfig.Database) (*SQL, error) {
+	return newSQL(ctx, config, false)
+}
+
+// NewWithReset opens the database and drops and recreates the Podsync tables.
+// All existing feed and episode data is deleted; unrelated tables are preserved.
+func NewWithReset(ctx context.Context, config *appconfig.Database) (*SQL, error) {
+	return newSQL(ctx, config, true)
+}
+
+func newSQL(ctx context.Context, config *appconfig.Database, reset bool) (*SQL, error) {
 	var dialector gorm.Dialector
 	switch config.Type {
 	case "sqlite":
@@ -88,6 +98,12 @@ func New(ctx context.Context, config *appconfig.Database) (*SQL, error) {
 		}
 	}
 	storage := &SQL{db: gdb, sqlDB: sqlDB}
+	if reset {
+		if err := storage.resetSchema(ctx); err != nil {
+			_ = sqlDB.Close()
+			return nil, err
+		}
+	}
 	if err := storage.initSchema(ctx); err != nil {
 		_ = sqlDB.Close()
 		return nil, err
