@@ -36,6 +36,7 @@ func TestDatabaseSchemaConstraints(t *testing.T) {
 		require.Len(t, feed.Episodes, 2)
 		require.Equal(t, "音频 🎧", feed.Title)
 		require.True(t, feed.PubDate.IsZero())
+		require.True(t, feed.Episodes[0].SourcePublishedAt.IsZero())
 	}
 	require.Error(t, database.UpdateEpisode(ctx, "Case", "Case", func(e *model.Episode) error {
 		e.Status = "invalid"
@@ -67,6 +68,27 @@ func TestResetSchema(t *testing.T) {
 	}
 	require.NoError(t, database.SyncFeed(ctx, "feed", &model.Feed{Episodes: []*model.Episode{{ID: "episode"}}}))
 }
+
+func TestAddSourcePublicationTimeToExistingSchema(t *testing.T) {
+	database := newTestSQL(t)
+	ctx := context.Background()
+	require.NoError(t, database.SyncFeed(ctx, "f", &model.Feed{Episodes: []*model.Episode{{ID: "ep"}}}))
+	require.NoError(t, database.UpdateEpisode(ctx, "f", "ep", func(e *model.Episode) error {
+		e.Status = model.EpisodeDownloaded
+		e.Size = 123
+		return nil
+	}))
+	// Emulate the previous schema while retaining the episode and its state.
+	require.NoError(t, database.db.Exec("ALTER TABLE episodes DROP COLUMN source_published_at").Error)
+	for range 2 {
+		require.NoError(t, database.initSchema(ctx))
+		episode, err := database.GetEpisode(ctx, "f", "ep")
+		require.NoError(t, err)
+		assert.True(t, episode.SourcePublishedAt.IsZero())
+		assert.Equal(t, model.EpisodeDownloaded, episode.Status)
+		assert.EqualValues(t, 123, episode.Size)
+	}
+}
 func TestSyncPreservesDownloadStateAndRefreshesMetadata(t *testing.T) {
 	ctx := context.Background()
 	database := newTestSQL(t)
@@ -86,7 +108,8 @@ func TestSyncPreservesDownloadStateAndRefreshesMetadata(t *testing.T) {
 	before, err := database.GetFeed(ctx, "f")
 	require.NoError(t, err)
 	feed.Title = "Updated"
-	feed.Episodes = []*model.Episode{{ID: "keep", Title: "Refreshed", Order: 2}, {ID: "new"}}
+	publishedAt := now.Add(-24 * time.Hour)
+	feed.Episodes = []*model.Episode{{ID: "keep", Title: "Refreshed", Order: 2, PubDate: now, SourcePublishedAt: publishedAt}, {ID: "new", SourcePublishedAt: publishedAt}}
 	require.NoError(t, database.SyncFeed(ctx, "f", feed))
 	after, err := database.GetFeed(ctx, "f")
 	require.NoError(t, err)
@@ -96,6 +119,11 @@ func TestSyncPreservesDownloadStateAndRefreshesMetadata(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "Refreshed", episode.Title)
 	assert.EqualValues(t, 2, episode.Order)
+	assert.True(t, publishedAt.Equal(episode.SourcePublishedAt))
+	assert.True(t, now.Equal(episode.PubDate))
+	newEpisode, err := database.GetEpisode(ctx, "f", "new")
+	require.NoError(t, err)
+	assert.True(t, publishedAt.Equal(newEpisode.SourcePublishedAt))
 	assert.Equal(t, model.EpisodeDownloaded, episode.Status)
 	assert.EqualValues(t, 33, episode.Size)
 	assert.Equal(t, "prefix/f/keep.mp3", episode.ObjectKey)

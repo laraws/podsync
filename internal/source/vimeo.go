@@ -134,14 +134,15 @@ func (v *VimeoSource) queryVideos(getVideos getVideosFunc, feed *model.Feed, cfg
 			)
 
 			feed.Episodes = append(feed.Episodes, &model.Episode{
-				ID:          videoID,
-				Title:       video.Name,
-				Description: video.Description,
-				Duration:    duration,
-				PubDate:     video.CreatedTime,
-				Thumbnail:   image,
-				VideoURL:    videoURL,
-				Status:      model.EpisodeNew,
+				ID:                videoID,
+				Title:             video.Name,
+				Description:       video.Description,
+				Duration:          duration,
+				PubDate:           video.CreatedTime,
+				SourcePublishedAt: video.CreatedTime,
+				Thumbnail:         image,
+				VideoURL:          videoURL,
+				Status:            model.EpisodeNew,
 			})
 
 			added++

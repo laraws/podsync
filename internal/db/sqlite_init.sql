@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS episodes (
     thumbnail     TEXT NOT NULL DEFAULT '',
     video_url     TEXT NOT NULL DEFAULT '',
     pub_date      DATETIME,
+    source_published_at DATETIME NULL,
     duration      INTEGER NOT NULL DEFAULT 0,
     episode_order INTEGER NOT NULL DEFAULT 0,
     status        TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','downloaded','error','cleaned')),

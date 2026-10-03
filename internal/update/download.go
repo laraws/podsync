@@ -118,7 +118,7 @@ func (u *Updater) notifyEpisode(ctx context.Context, cfg *config.Feed, title str
 	if u.notifier == nil || ctx.Err() == context.Canceled {
 		return
 	}
-	result := notify.EpisodeResult{FeedID: cfg.ID, FeedTitle: title, EpisodeID: episode.ID, EpisodeTitle: episode.Title, EpisodeURL: episode.VideoURL, At: time.Now(), Duration: time.Since(started), Size: size, Err: downloadErr}
+	result := notify.EpisodeResult{FeedID: cfg.ID, FeedTitle: title, EpisodeID: episode.ID, EpisodeTitle: episode.Title, EpisodeURL: episode.VideoURL, At: time.Now(), PublishedAt: episode.SourcePublishedAt, Duration: time.Since(started), Size: size, Err: downloadErr}
 	if err := u.notifier.NotifyEpisode(context.WithoutCancel(ctx), result); err != nil {
 		log.WithError(err).WithField("episode_id", episode.ID).Error("episode notification failed")
 	}

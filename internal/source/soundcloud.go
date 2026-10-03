@@ -58,14 +58,15 @@ func (s *SoundCloudSource) Fetch(_ctx context.Context, cfg *appconfig.Feed) (*mo
 				)
 
 				result.Episodes = append(result.Episodes, &model.Episode{
-					ID:          videoID,
-					Title:       track.Title,
-					Description: track.Description,
-					Duration:    duration,
-					VideoURL:    mediaURL,
-					PubDate:     pubDate,
-					Thumbnail:   track.ArtworkURL,
-					Status:      model.EpisodeNew,
+					ID:                videoID,
+					Title:             track.Title,
+					Description:       track.Description,
+					Duration:          duration,
+					VideoURL:          mediaURL,
+					PubDate:           pubDate,
+					SourcePublishedAt: pubDate,
+					Thumbnail:         track.ArtworkURL,
+					Status:            model.EpisodeNew,
 				})
 
 				added++

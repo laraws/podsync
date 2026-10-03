@@ -300,6 +300,15 @@ func (yt *YouTubeSource) queryVideoDescriptions(ctx context.Context, playlist ma
 				continue
 			}
 
+			var publishedAt time.Time
+			if snippet.PublishedAt != "" {
+				var err error
+				publishedAt, err = yt.parseDate(snippet.PublishedAt)
+				if err != nil {
+					return fmt.Errorf("failed to parse video publish date: %s: %w", snippet.PublishedAt, err)
+				}
+			}
+
 			// Parse date added to playlist / publication date
 			dateStr := ""
 			playlistItem, ok := playlist[video.Id]
@@ -333,15 +342,16 @@ func (yt *YouTubeSource) queryVideoDescriptions(ctx context.Context, playlist ma
 			order := playlistItem.Position
 
 			feed.Episodes = append(feed.Episodes, &model.Episode{
-				ID:          video.Id,
-				Title:       snippet.Title,
-				Description: snippet.Description,
-				Thumbnail:   image,
-				Duration:    seconds,
-				VideoURL:    videoURL,
-				PubDate:     pubDate,
-				Order:       order,
-				Status:      model.EpisodeNew,
+				ID:                video.Id,
+				Title:             snippet.Title,
+				Description:       snippet.Description,
+				Thumbnail:         image,
+				Duration:          seconds,
+				VideoURL:          videoURL,
+				PubDate:           pubDate,
+				SourcePublishedAt: publishedAt,
+				Order:             order,
+				Status:            model.EpisodeNew,
 			})
 		}
 	}

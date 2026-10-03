@@ -20,6 +20,7 @@ type EpisodeResult struct {
 	FeedID, FeedTitle                   string
 	EpisodeID, EpisodeTitle, EpisodeURL string
 	At                                  time.Time
+	PublishedAt                         time.Time
 	Duration                            time.Duration
 	Size                                int64
 	Err                                 error
@@ -180,6 +181,9 @@ func episodeMessage(r EpisodeResult) string {
 	message += field("Feed", r.FeedTitle, 256) + field("Feed ID", r.FeedID, 128)
 	if r.EpisodeID != "" {
 		message += field("Episode", r.EpisodeTitle, 512) + field("Episode ID", r.EpisodeID, 128)
+		if !r.PublishedAt.IsZero() {
+			message += field("发布时间", r.PublishedAt.In(r.At.Location()).Format("2006-01-02 15:04:05 MST -07:00"), 80)
+		}
 	}
 	message += field("耗时", r.Duration.Round(time.Millisecond).String(), 64)
 	if r.EpisodeURL != "" {

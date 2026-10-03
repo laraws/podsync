@@ -25,7 +25,8 @@ func (s *SQL) resetSchema(ctx context.Context) error {
 	return nil
 }
 
-// initSchema creates a fresh schema. No legacy schema repair or migration is performed.
+// initSchema creates tables and adds the original source publication timestamp
+// to existing episode tables. Other legacy schema repair is not performed.
 func (s *SQL) initSchema(ctx context.Context) error {
 	schema := sqliteInitSQL
 	if s.db.Name() == "mysql" {
@@ -38,6 +39,15 @@ func (s *SQL) initSchema(ctx context.Context) error {
 		}
 		if err := s.db.WithContext(ctx).Exec(statement).Error; err != nil {
 			return fmt.Errorf("initialize database schema: %w", err)
+		}
+	}
+	if !s.db.WithContext(ctx).Migrator().HasColumn(&episodeRow{}, "source_published_at") {
+		columnType := "DATETIME"
+		if s.db.Name() == "mysql" {
+			columnType = "DATETIME(6)"
+		}
+		if err := s.db.WithContext(ctx).Exec("ALTER TABLE episodes ADD COLUMN source_published_at " + columnType + " NULL").Error; err != nil {
+			return fmt.Errorf("add episode source publication timestamp: %w", err)
 		}
 	}
 	return nil

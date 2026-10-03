@@ -83,7 +83,7 @@ PODSYNC_LOG_DIR=log \
 
 ### Telegram 下载通知
 
-本地实际配置已启用 Telegram。每次 episode 下载完成后向 `user_ids` 中的所有收件人发送 MarkdownV2 消息，重复 ID 自动去重。消息包含完成时间及时区、feed/episode 标题和 ID、耗时、来源链接；成功显示文件大小，失败显示原因。自定义 feed 标题优先使用。已存在、被过滤或跳过的 episode 不通知；后续重试有新的下载结果时再次通知。
+本地实际配置已启用 Telegram。每次 episode 下载完成后向 `user_ids` 中的所有收件人发送 MarkdownV2 消息，重复 ID 自动去重。消息包含完成时间及时区、feed/episode 标题和 ID、原始发布时间（如有）、耗时、来源链接；成功显示文件大小，失败显示原因。发布时间与完成时间使用相同时区，YouTube 使用视频本身的发布时间，独立于加入播放列表的时间。现有数据库启动时自动补充可空的 `source_published_at` 字段，下次元数据同步时填入原始发布时间。自定义 feed 标题优先使用。已存在、被过滤或跳过的 episode 不通知；后续重试有新的下载结果时再次通知。
 
 ```yaml
 telegram:

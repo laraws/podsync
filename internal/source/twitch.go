@@ -92,14 +92,15 @@ func (t *TwitchSource) Fetch(_ctx context.Context, cfg *appconfig.Feed) (*model.
 				durationSeconds := int64(duration.Seconds())
 
 				feed.Episodes = append(feed.Episodes, &model.Episode{
-					ID:          video.ID,
-					Title:       fmt.Sprintf("%s (%s)", video.Title, date.Format("2006-01-02 15:04 UTC")),
-					Description: video.Description,
-					Thumbnail:   thumbnailUrl,
-					Duration:    durationSeconds,
-					VideoURL:    video.URL,
-					PubDate:     date,
-					Status:      model.EpisodeNew,
+					ID:                video.ID,
+					Title:             fmt.Sprintf("%s (%s)", video.Title, date.Format("2006-01-02 15:04 UTC")),
+					Description:       video.Description,
+					Thumbnail:         thumbnailUrl,
+					Duration:          durationSeconds,
+					VideoURL:          video.URL,
+					PubDate:           date,
+					SourcePublishedAt: date,
+					Status:            model.EpisodeNew,
 				})
 
 				added++

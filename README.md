@@ -141,8 +141,10 @@ size, attempt count, last attempt time, last error and download completion time)
 Metadata refreshes preserve download state. Foreign keys cascade feed deletion;
 indexes support feed iteration and the recent-failure health query. `/health`
 counts currently failed episodes by their last attempt time, independent of their
-publication date. Fresh SQLite/MySQL schemas are initialized on opening the database;
-there are no old-schema migrations or object-key backfills.
+publication date. Fresh SQLite/MySQL schemas are initialized on opening the database.
+Existing episode tables automatically gain a nullable `source_published_at` column;
+the next metadata refresh fills the original publication timestamps. No other
+old-schema migrations or object-key backfills are performed.
 
 Local writes publish files through a temporary file and rename. The Web UI is
 embedded in the binary. For S3/R2, `public_url` is the public directory URL before
@@ -243,7 +245,7 @@ the next scheduled round may retry. Normal shutdown cancellation sends no failur
 
 ### Telegram episode notifications
 
-Use a Telegram bot to send a MarkdownV2 notification to every configured recipient per episode download attempt. Messages include completion time with timezone, feed and episode titles/IDs, elapsed time, source URL, and either file size or a failure reason. Titles use the feed's custom title when configured. Existing files and filtered/skipped episodes do not generate notifications.
+Use a Telegram bot to send a MarkdownV2 notification to every configured recipient per episode download attempt. Messages include completion time with timezone, feed and episode titles/IDs, original publication time when available, elapsed time, source URL, and either file size or a failure reason. Publication time uses the same timezone as completion time. For YouTube this is the video's publication time, independent of when it was added to a playlist. Titles use the feed's custom title when configured. Existing files and filtered/skipped episodes do not generate notifications.
 
 ```yaml
 telegram:
@@ -291,7 +293,7 @@ The CLI uses Cobra. Run `podsync serve` for the scheduled service, `podsync upda
 
 Running `podsync` without a subcommand shows help. Single updates return a nonzero exit code if any feed fails.
 
-`init-db` preserves existing data by default. To delete all feed and episode data and recreate the Podsync tables, run `podsync init-db --config config.yaml --reset` (or combine `--reset` with `--type` and `--dsn`). This works with SQLite and MySQL; unrelated tables and downloaded media files are preserved. Existing table structures are not migrated; `--reset` rebuilds them from the current schema.
+`init-db` preserves existing data by default and adds the nullable `source_published_at` column if missing. To delete all feed and episode data and recreate the Podsync tables, run `podsync init-db --config config.yaml --reset` (or combine `--reset` with `--type` and `--dsn`). This works with SQLite and MySQL; unrelated tables and downloaded media files are preserved. Other existing table structures are not migrated; `--reset` rebuilds them from the current schema.
 
 ### Build and run as binary:
 

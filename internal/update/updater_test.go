@@ -110,7 +110,8 @@ func TestEpisodeDownloadNotifications(t *testing.T) {
 			database, err := db.New(context.Background(), &config.Database{Type: "sqlite", DSN: filepath.Join(t.TempDir(), "test.db")})
 			require.NoError(t, err)
 			t.Cleanup(func() { require.NoError(t, database.Close()) })
-			episodes := []*model.Episode{{ID: "ep1", Title: "Episode [1]", VideoURL: "https://example.com/ep1", Status: model.EpisodeNew}, {ID: "ep2", Title: "Episode 2", Status: model.EpisodeNew}}
+			publishedAt := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+			episodes := []*model.Episode{{ID: "ep1", Title: "Episode [1]", VideoURL: "https://example.com/ep1", SourcePublishedAt: publishedAt, PubDate: publishedAt.Add(24 * time.Hour), Status: model.EpisodeNew}, {ID: "ep2", Title: "Episode 2", SourcePublishedAt: publishedAt.Add(time.Hour), Status: model.EpisodeNew}}
 			require.NoError(t, database.SyncFeed(ctx, "PK1", &model.Feed{Title: "Feed title", Episodes: episodes}))
 			objects, err := storage.NewLocal(t.TempDir())
 			require.NoError(t, err)
@@ -156,6 +157,7 @@ func TestEpisodeDownloadNotifications(t *testing.T) {
 					assert.Equal(t, "Feed title", result.FeedTitle)
 				}
 				assert.Equal(t, episodes[i].Title, result.EpisodeTitle)
+				assert.Equal(t, episodes[i].SourcePublishedAt, result.PublishedAt)
 				assert.WithinDuration(t, time.Now(), result.At, time.Second)
 				if test.wantReason != "" {
 					require.ErrorContains(t, result.Err, test.wantReason)

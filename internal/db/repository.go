@@ -43,7 +43,7 @@ func (s *SQL) SyncFeed(ctx context.Context, feedID string, feed *model.Feed) err
 			ids = append(ids, episode.ID)
 		}
 		if len(rows) > 0 {
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "feed_id"}, {Name: "id"}}, DoUpdates: clause.AssignmentColumns([]string{"title", "description", "thumbnail", "video_url", "pub_date", "duration", "episode_order"})}).CreateInBatches(rows, 100).Error; err != nil {
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "feed_id"}, {Name: "id"}}, DoUpdates: clause.AssignmentColumns([]string{"title", "description", "thumbnail", "video_url", "pub_date", "source_published_at", "duration", "episode_order"})}).CreateInBatches(rows, 100).Error; err != nil {
 				return err
 			}
 		}

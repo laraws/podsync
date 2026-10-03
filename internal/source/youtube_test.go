@@ -6,14 +6,44 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 
+	"github.com/mxpv/podsync/internal/config"
 	"github.com/mxpv/podsync/internal/model"
 )
+
+func TestYouTubeOriginalPublicationTime(t *testing.T) {
+	const published = "2026-09-01T12:00:00Z"
+	for _, added := range []string{"2026-08-01T12:00:00Z", "2026-10-01T12:00:00Z"} {
+		t.Run(added, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, "/youtube/v3/videos", r.URL.Path)
+				assert.Equal(t, "video1", r.URL.Query().Get("id"))
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"items":[{"id":"video1","snippet":{"title":"Video","publishedAt":%q},"contentDetails":{"duration":"PT1M"}}]}`, published)
+			}))
+			t.Cleanup(server.Close)
+			client, err := youtube.NewService(context.Background(), option.WithHTTPClient(server.Client()), option.WithEndpoint(server.URL+"/"))
+			require.NoError(t, err)
+			source := &YouTubeSource{client: client, key: apiKey("test-key")}
+			playlist := map[string]*youtube.PlaylistItemSnippet{"video1": {PublishedAt: added, ResourceId: &youtube.ResourceId{VideoId: "video1"}}}
+			feed := &model.Feed{}
+			require.NoError(t, source.queryVideoDescriptions(context.Background(), playlist, &config.Feed{}, feed))
+			require.Len(t, feed.Episodes, 1)
+			original, err := time.Parse(time.RFC3339, published)
+			require.NoError(t, err)
+			assert.True(t, original.Equal(feed.Episodes[0].SourcePublishedAt))
+			ordered, err := time.Parse(time.RFC3339, max(published, added))
+			require.NoError(t, err)
+			assert.True(t, ordered.Equal(feed.Episodes[0].PubDate))
+		})
+	}
+}
 
 func TestResolveHandle(t *testing.T) {
 	for _, test := range []struct {

@@ -31,21 +31,23 @@ const (
 
 type Episode struct {
 	// ID of episode
-	ID            string        `json:"id"`
-	Title         string        `json:"title"`
-	Description   string        `json:"description"`
-	Thumbnail     string        `json:"thumbnail"`
-	Duration      int64         `json:"duration"`
-	VideoURL      string        `json:"video_url"`
-	PubDate       time.Time     `json:"pub_date"`
-	Size          int64         `json:"size"`
-	Order         int64         `json:"order"`
-	Status        EpisodeStatus `json:"status"` // Disk status
-	LastAttemptAt *time.Time    `json:"last_attempt_at,omitempty"`
-	DownloadedAt  *time.Time    `json:"downloaded_at,omitempty"`
-	Attempts      int           `json:"attempts"`
-	LastError     string        `json:"last_error,omitempty"`
-	ObjectKey     string        `json:"object_key"` // Stable key in the configured object storage
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Thumbnail   string    `json:"thumbnail"`
+	Duration    int64     `json:"duration"`
+	VideoURL    string    `json:"video_url"`
+	PubDate     time.Time `json:"pub_date"`
+	// SourcePublishedAt is the original publication time, independent of playlist ordering.
+	SourcePublishedAt time.Time     `json:"source_published_at,omitempty"`
+	Size              int64         `json:"size"`
+	Order             int64         `json:"order"`
+	Status            EpisodeStatus `json:"status"` // Disk status
+	LastAttemptAt     *time.Time    `json:"last_attempt_at,omitempty"`
+	DownloadedAt      *time.Time    `json:"downloaded_at,omitempty"`
+	Attempts          int           `json:"attempts"`
+	LastError         string        `json:"last_error,omitempty"`
+	ObjectKey         string        `json:"object_key"` // Stable key in the configured object storage
 }
 
 type Feed struct {

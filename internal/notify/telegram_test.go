@@ -87,7 +87,7 @@ func TestTelegramLargeFailureMentionList(t *testing.T) {
 	}
 	long := strings.Repeat("😀_*", 3000)
 	failure := &downloader.Failure{Reason: long, Output: "ERROR: " + long, Cause: errors.New("download failed")}
-	result := EpisodeResult{FeedID: long, FeedTitle: long, EpisodeID: long, EpisodeTitle: long, EpisodeURL: long, Err: failure}
+	result := EpisodeResult{FeedID: long, FeedTitle: long, EpisodeID: long, EpisodeTitle: long, EpisodeURL: long, PublishedAt: time.Now(), Err: failure}
 	var texts []string
 	cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{-100123}, Timeout: time.Second, FailureMentionUserIDs: ids}
 	notifier := testTelegramConfig(t, cfg, func(w http.ResponseWriter, r *http.Request) {
@@ -125,6 +125,7 @@ func TestTelegramSDKMessage(t *testing.T) {
 				assert.Contains(t, text, `News\_\[1\]\\path`)
 				assert.Contains(t, text, `Episode\*\(测试\)\!`)
 				assert.Contains(t, text, "2026\\-10\\-01 21:00:00 CST \\+08:00")
+				assert.Contains(t, text, `*发布时间：* 2026\-09\-01 20:00:00 CST \+08:00`)
 				if failure {
 					assert.Contains(t, text, "下载失败")
 					assert.Contains(t, text, `HTTP 429: unavailable\_video`)
@@ -135,7 +136,7 @@ func TestTelegramSDKMessage(t *testing.T) {
 				}
 				fmt.Fprint(w, `{"ok":true,"result":{"message_id":1,"chat":{"id":9876543210,"type":"private"}}}`)
 			})
-			event := EpisodeResult{FeedID: "PK1", FeedTitle: `News_[1]\path`, EpisodeID: "ep1", EpisodeTitle: "Episode*(测试)!", EpisodeURL: "https://example.com/watch?v=1", At: time.Date(2026, 10, 1, 21, 0, 0, 0, time.FixedZone("CST", 8*3600)), Duration: time.Second, Size: 6495692}
+			event := EpisodeResult{FeedID: "PK1", FeedTitle: `News_[1]\path`, EpisodeID: "ep1", EpisodeTitle: "Episode*(测试)!", EpisodeURL: "https://example.com/watch?v=1", At: time.Date(2026, 10, 1, 21, 0, 0, 0, time.FixedZone("CST", 8*3600)), PublishedAt: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC), Duration: time.Second, Size: 6495692}
 			if failure {
 				event.Err = errors.New("HTTP 429: unavailable_video")
 			}
@@ -203,6 +204,11 @@ func TestEpisodeMessageBoundsAndEscaping(t *testing.T) {
 	assert.LessOrEqual(t, len(utf16.Encode([]rune(plain))), 4096)
 	assert.Contains(t, text, "…")
 	assert.Contains(t, episodeMessage(EpisodeResult{FeedTitle: `\_*[]()~` + "`" + `>#+-=|{}.!`}), `\\\_\*\[\]\(\)\~\`+"`"+`\>\#\+\-\=\|\{\}\.\!`)
+}
+
+func TestEpisodeMessageMissingPublicationTime(t *testing.T) {
+	assert.NotContains(t, episodeMessage(EpisodeResult{EpisodeID: "ep1"}), "发布时间")
+	assert.NotContains(t, episodeMessage(EpisodeResult{PublishedAt: time.Now(), Err: errors.New("feed failure")}), "发布时间")
 }
 
 func TestTelegramDisabled(t *testing.T) {
