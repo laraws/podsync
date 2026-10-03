@@ -17,9 +17,9 @@
 ![Create API key](img/youtube_create_api_key.png)
 8. Copy token to your CLI's configuration file or set it as an environment variable:
 ![Copy token](img/youtube_copy_token.png)
-```toml
-[tokens]
-youtube = "key1"
+```yaml
+tokens:
+  youtube: "key1"
 ```
 Or set the environment variable:
 ```sh

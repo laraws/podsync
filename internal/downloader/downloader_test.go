@@ -1,0 +1,161 @@
+package downloader
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/stretchr/testify/assert"
+
+	appconfig "github.com/mxpv/podsync/internal/config"
+	"github.com/mxpv/podsync/internal/model"
+)
+
+func TestBuildArgs(t *testing.T) {
+	tests := []struct {
+		name         string
+		format       model.Format
+		customFormat appconfig.CustomFormat
+		quality      model.Quality
+		maxHeight    int
+		output       string
+		videoURL     string
+		ytdlArgs     []string
+		expect       []string
+	}{
+		{
+			name:     "Audio unknown quality",
+			format:   model.FormatAudio,
+			output:   "/tmp/1",
+			videoURL: "http://url",
+			expect:   []string{"--extract-audio", "--audio-format", "mp3", "--format", "bestaudio", "--output", "/tmp/1", "http://url"},
+		},
+		{
+			name:     "Audio low quality",
+			format:   model.FormatAudio,
+			quality:  model.QualityLow,
+			output:   "/tmp/1",
+			videoURL: "http://url",
+			expect:   []string{"--extract-audio", "--audio-format", "mp3", "--format", "worstaudio", "--output", "/tmp/1", "http://url"},
+		},
+		{
+			name:     "Audio best quality",
+			format:   model.FormatAudio,
+			quality:  model.QualityHigh,
+			output:   "/tmp/1",
+			videoURL: "http://url",
+			expect:   []string{"--extract-audio", "--audio-format", "mp3", "--format", "bestaudio", "--output", "/tmp/1", "http://url"},
+		},
+		{
+			name:     "Video unknown quality",
+			format:   model.FormatVideo,
+			output:   "/tmp/1",
+			videoURL: "http://url",
+			expect:   []string{"--format", "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best", "--output", "/tmp/1", "http://url"},
+		},
+		{
+			name:      "Video unknown quality with maxheight",
+			format:    model.FormatVideo,
+			maxHeight: 720,
+			output:    "/tmp/1",
+			videoURL:  "http://url",
+			expect:    []string{"--format", "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best", "--output", "/tmp/1", "http://url"},
+		},
+		{
+			name:     "Video low quality",
+			format:   model.FormatVideo,
+			quality:  model.QualityLow,
+			output:   "/tmp/2",
+			videoURL: "http://url",
+			expect:   []string{"--format", "worstvideo[ext=mp4][vcodec^=avc1]+worstaudio[ext=m4a]/worst[ext=mp4][vcodec^=avc1]/worst[ext=mp4]/worst", "--output", "/tmp/2", "http://url"},
+		},
+		{
+			name:      "Video low quality with maxheight",
+			format:    model.FormatVideo,
+			quality:   model.QualityLow,
+			maxHeight: 720,
+			output:    "/tmp/2",
+			videoURL:  "http://url",
+			expect:    []string{"--format", "worstvideo[ext=mp4][vcodec^=avc1]+worstaudio[ext=m4a]/worst[ext=mp4][vcodec^=avc1]/worst[ext=mp4]/worst", "--output", "/tmp/2", "http://url"},
+		},
+		{
+			name:     "Video high quality",
+			format:   model.FormatVideo,
+			quality:  model.QualityHigh,
+			output:   "/tmp/2",
+			videoURL: "http://url1",
+			expect:   []string{"--format", "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best", "--output", "/tmp/2", "http://url1"},
+		},
+		{
+			name:      "Video high quality with maxheight",
+			format:    model.FormatVideo,
+			quality:   model.QualityHigh,
+			maxHeight: 1024,
+			output:    "/tmp/2",
+			videoURL:  "http://url1",
+			expect:    []string{"--format", "bestvideo[height<=1024][ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[height<=1024][ext=mp4][vcodec^=avc1]/best[ext=mp4]/best", "--output", "/tmp/2", "http://url1"},
+		},
+		{
+			name:     "Video high quality with custom yt-dlp arguments",
+			format:   model.FormatVideo,
+			quality:  model.QualityHigh,
+			output:   "/tmp/2",
+			videoURL: "http://url1",
+			ytdlArgs: []string{"--write-sub", "--embed-subs", "--sub-lang", "en,en-US,en-GB"},
+			expect:   []string{"--format", "bestvideo[ext=mp4][vcodec^=avc1]+bestaudio[ext=m4a]/best[ext=mp4][vcodec^=avc1]/best[ext=mp4]/best", "--write-sub", "--embed-subs", "--sub-lang", "en,en-US,en-GB", "--output", "/tmp/2", "http://url1"},
+		},
+		{
+			name:         "Custom format",
+			format:       model.FormatCustom,
+			customFormat: appconfig.CustomFormat{Selector: "bestaudio[ext=m4a]", Extension: "m4a"},
+			quality:      model.QualityHigh,
+			output:       "/tmp/2",
+			videoURL:     "http://url1",
+			expect:       []string{"--format", "bestaudio[ext=m4a]", "--recode-video", "m4a", "--output", "/tmp/2", "http://url1"},
+		},
+	}
+
+	for _, tst := range tests {
+		t.Run(tst.name, func(t *testing.T) {
+			result := buildArgs(&appconfig.Feed{
+				Format:       tst.format,
+				Quality:      tst.quality,
+				CustomFormat: tst.customFormat,
+				MaxHeight:    tst.maxHeight,
+				DownloadArgs: tst.ytdlArgs,
+			}, &model.Episode{
+				VideoURL: tst.videoURL,
+			}, tst.output)
+
+			assert.EqualValues(t, tst.expect, result)
+		})
+	}
+}
+
+func TestPlaylistMetadataRejectsInvalidJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture requires POSIX")
+	}
+	script := filepath.Join(t.TempDir(), "yt-dlp")
+	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\necho not-json\n"), 0700))
+	dl := &YTDLP{path: script, timeout: 10 * time.Second}
+	_, err := dl.PlaylistMetadata(context.Background(), &appconfig.Feed{}, "https://example.com/playlist")
+	require.ErrorContains(t, err, "decode playlist metadata")
+}
+func TestDownloaderHonorsCancellation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell fixture requires POSIX")
+	}
+	script := filepath.Join(t.TempDir(), "yt-dlp")
+	require.NoError(t, os.WriteFile(script, []byte("#!/bin/sh\nexec sleep 30\n"), 0700))
+	dl := &YTDLP{path: script, timeout: time.Minute}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	_, err := dl.exec(ctx)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}

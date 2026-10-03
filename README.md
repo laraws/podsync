@@ -31,7 +31,7 @@ any device in podcast client.
 - One-click deployment for AWS.
 - Runs on Windows, Mac OS, Linux, and Docker.
 - Supports ARM.
-- Automatic yt-dlp self update.
+- Optional yt-dlp self update every 24 hours while serving (custom binaries are excluded).
 - Supports API keys rotation.
 
 ## 📋 Dependencies
@@ -46,10 +46,50 @@ brew install yt-dlp ffmpeg go
 
 ## 📖 Documentation
 
+- [服务启动说明（中文）：源码、二进制、Docker、Compose、systemd](./docs/start_service.md)
 - [How to get Vimeo API token](./docs/how_to_get_vimeo_token.md)
 - [How to get YouTube API Key](./docs/how_to_get_youtube_api_key.md)
 - [Podsync on QNAP NAS Guide](./docs/how_to_setup_podsync_on_qnap_nas.md)
 - [Schedule updates with cron](./docs/cron.md)
+
+## Publish a release
+
+### Build and push latest directly
+
+```bash
+python3 scripts/build_latest.py
+```
+
+By default this builds the current working tree only for the machine's architecture
+(`linux/arm64` on ARM64, `linux/amd64` on AMD64) and
+pushes `ghcr.io/laraws/podsync:latest`, entirely on the machine running the script.
+It prints elapsed time. No Git tag or GitHub Actions run is created.
+
+Requires Python 3.8+, Git, and Docker with Buildx support.
+Log in to GHCR with `docker login ghcr.io` before publishing.
+
+```bash
+python3 scripts/build_latest.py --dry-run
+
+# Explicitly build and push both architectures (requires multi-platform support).
+python3 scripts/build_latest.py --platform linux/arm64,linux/amd64
+```
+
+The Dockerfile uses native Go cross-compilation with C cross-compilers to retain
+SQLite support, and caches Go modules and compilation output.
+
+### Publish a version through GitHub Actions
+
+After committing your changes, run `python3 scripts/release.py`. It runs the tests,
+increments the latest remote version's patch number, pushes the tag for the
+current commit, and waits for the Release workflow. The workflow publishes
+`linux/amd64` and `linux/arm64` images to `ghcr.io/laraws/podsync`, tagged with
+the release version and `latest`, plus binary release archives.
+
+Requires Python 3.9+, Git, Go, and GitHub CLI authenticated with `gh auth login`.
+No third-party Python packages are needed.
+Use `python3 scripts/release.py --dry-run` to preview, or
+`python3 scripts/release.py v2.9.0` to choose an explicit version.
 
 ## 🌙 Nightly builds
 
@@ -66,40 +106,94 @@ In order to query YouTube or Vimeo API you have to obtain an API token first.
 - [How to get YouTube API key](https://elfsight.com/blog/2016/12/how-to-get-youtube-api-key-tutorial/)
 - [Generate an access token for Vimeo](https://developer.vimeo.com/api/guides/start#generate-access-token)
 
+## Project structure
+
+```text
+main.go              Process entry point, signals and exit code
+cmd/                 Cobra commands, flags and configuration resolution
+internal/app/        Dependency composition, one-shot updates and service lifecycle
+internal/scheduler/  Cron scheduling, per-feed deduplication and cancellation
+internal/update/     Metadata sync, downloads, retention and publication
+internal/source/     YouTube/Vimeo/SoundCloud/Twitch adapters and API credentials
+internal/downloader/ yt-dlp subprocess adapter
+internal/feed/       Pure RSS/OPML rendering
+internal/storage/    Atomic local writes and S3/R2 object storage
+internal/db/         SQL metadata and download-state persistence
+internal/model/      Domain metadata and episode state
+internal/web/        HTTP file serving, embedded Web UI and health query
+internal/hooks/      Cancellable post-download commands
+internal/config/     YAML loading, defaults and startup validation
+internal/logging/    Console output or daily log files
+internal/notify/     Telegram episode notifications
+internal/buildinfo/  Build metadata
+```
+
+The entry point is the repository root: `go run . serve -c config.local-mysql.yaml`. CLI adapters pass resolved configuration to the application; application-specific setup stays under `internal/`.
+
+## Update flow and database
+
+An update fetches source metadata, synchronizes it in one transaction, downloads
+eligible episodes newest first, applies retention, then publishes RSS and OPML.
+`page_size` caps fetched episodes and downloads per update; it does not cap the
+number retained over multiple updates. Download failures return a nonzero exit
+code while successful episodes are still published. Scheduled updates are serial;
+repeated triggers for a queued or running feed are coalesced.
+
+The database contains `feeds` (source metadata and creation/update timestamps)
+and `episodes` (metadata, numeric playlist order, download status, object key,
+size, attempt count, last attempt time, last error and download completion time).
+Metadata refreshes preserve download state. Foreign keys cascade feed deletion;
+indexes support feed iteration and the recent-failure health query. `/health`
+counts currently failed episodes by their last attempt time, independent of their
+publication date. Fresh SQLite/MySQL schemas are initialized on opening the database.
+Existing episode tables automatically gain a nullable `source_published_at` column;
+the next metadata refresh fills the original publication timestamps. No other
+old-schema migrations or object-key backfills are performed.
+
+Local writes publish files through a temporary file and rename. The Web UI is
+embedded in the binary. For S3/R2, `public_url` is the public directory URL before
+the storage `prefix`; RSS, OPML and hook URLs use the same object-key rules.
+Post-download hooks receive `EPISODE_FILE` (absolute path for local storage,
+empty for cloud), `EPISODE_KEY`, `EPISODE_URL`, `FEED_NAME`, and `EPISODE_TITLE`.
+`log.dir` enables daily log files; leaving it empty selects console output.
+
+Platform integration tests require explicit credentials. Normal unit tests use
+local HTTP fixtures or injected adapters; `go test -race ./...` covers the queue,
+update pipeline and storage recovery without downloading media or sending Telegram messages.
+
+To run the database tests against a local MySQL server, set `PODSYNC_TEST_MYSQL_DSN`
+and run `go test -race -count=1 ./internal/db`. Each test creates and drops its own
+temporary database, ignoring the database name in the DSN; the test user needs
+permission to create and drop databases. With Colima, start Docker using `colima start`.
+
 ## ⚙️ Configuration
 
-You need to create a configuration file (for instance `config.toml`) and specify the list of feeds that you're going to host.
-See [config.toml.example](./config.toml.example) for all possible configuration keys available in Podsync.
+You need to create a configuration file (for instance `config.yaml`) and specify the list of feeds that you're going to host.
+See [config.yaml.example](./config.yaml.example) for all possible configuration keys available in Podsync.
+
+Configuration is loaded through Viper. Precedence is explicit CLI flags, environment variables, YAML values, then defaults. Feed identifiers retain their original case. Only `.yaml` and `.yml` files are accepted; unknown fields, duplicate keys and multiple documents are rejected. Audio is the default format; select video or custom explicitly when needed.
 
 Minimal configuration would look like this:
 
-```toml
-[server]
-port = 8080
-
-[storage]
-  [storage.local]
-  # Don't change if you run podsync via docker
-  data_dir = "/app/data/"
-
-[tokens]
-youtube = "PASTE YOUR API KEY HERE" # See config.toml.example for environment variables
-
-[feeds]
-    [feeds.ID1]
-    url = "https://www.youtube.com/channel/UCxC5Ls6DwqV0e-CYcAKkExQ"
+```yaml
+server:
+  port: 8080
+storage:
+  local:
+    data_dir: "/app/data/"
+tokens:
+  youtube: "PASTE YOUR API KEY HERE"
+feeds:
+  ID1:
+    url: "https://www.youtube.com/channel/UCxC5Ls6DwqV0e-CYcAKkExQ"
 ```
 
 If you want to hide Podsync behind reverse proxy like nginx, you can use `hostname` field:
 
-```toml
-[server]
-port = 8080
-hostname = "https://my.test.host:4443"
-
-[feeds]
-  [feeds.ID1]
-  ...
+```yaml
+server:
+  port: 8080
+  hostname: "https://my.test.host:4443"
 ```
 
 Server will be accessible from `http://localhost:8080`, but episode links will point to `https://my.test.host:4443/ID1/...`
@@ -108,26 +202,85 @@ Server will be accessible from `http://localhost:8080`, but episode links will p
 
 R2 stores episodes, generated RSS XML, and OPML outside the local data directory. `public_url` must be an enabled R2 custom domain (recommended) or `r2.dev` URL; it is intentionally separate from the authenticated S3 API endpoint.
 
-```toml
-[storage]
-type = "r2"
-
-  [storage.r2]
-  endpoint_url = "https://ACCOUNT_ID.r2.cloudflarestorage.com"
-  bucket = "podcasts"
-  public_url = "https://media.example.com"
-  prefix = ""
+```yaml
+storage:
+  type: "r2"
+  r2:
+    endpoint_url: "https://ACCOUNT_ID.r2.cloudflarestorage.com"
+    bucket: "podcasts"
+    public_url: "https://media.example.com"
+    prefix: ""
 ```
 
 Set the credentials with `PODSYNC_R2_ACCESS_KEY_ID` and `PODSYNC_R2_SECRET_ACCESS_KEY`. Downloaded episode rows persist only the object key; RSS enclosure URLs are assembled from `public_url` at generation time.
+
+### YouTube cookies
+
+When account access is needed, export Netscape-format cookies using the
+[official YouTube cookie guide](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies):
+log in from a new private window, open `https://www.youtube.com/robots.txt` in
+that same tab, export only `youtube.com` cookies, then close the private window.
+Do not reuse that browser session.
+
+Set `youtube_dl_args: ["--cookies", "/app/cookie.txt"]` on the relevant feeds.
+Mount the source as `./cookie.txt:/app/cookie.txt:ro` and restrict host permissions
+with `chmod 600 cookie.txt`. At startup Podsync copies each source to a private
+writable temporary jar, reused for playlist metadata and downloads and removed
+on shutdown. The export is never overwritten and stays outside the media directory.
+Replacing it requires a restart. For Docker use `docker compose restart podsync`;
+restarting the container also remounts an atomically replaced source file.
+If Compose mount settings or the selected image change, recreate the container
+with `docker compose up -d --force-recreate podsync` instead.
+
+yt-dlp failures are classified into readable Chinese reasons and suggestions:
+expired/malformed cookies, login or bot checks, rate limits, access restrictions,
+unavailable content or formats, JavaScript challenge failures, network/timeouts,
+ffmpeg/postprocessing, disk and argument errors. Unknown failures retain an explicit
+unknown classification. Bot checks and HTTP 403 are not treated as proof of expired cookies.
+
+Telegram includes the explanation and a bounded original-error excerpt. Full stdout,
+stderr and the underlying process error remain in logs and `episodes.last_error`
+(for download attempts), with cookie values and recognized credentials redacted.
+MySQL uses LONGTEXT for long diagnostics; SQLite TEXT has no 64 KB column limit.
+Metadata failures also send one feed notification. Cookie, bot-check, rate-limit,
+network and other shared environment failures stop remaining downloads for the
+current feed round. Content-specific failures permit other episodes to continue;
+the next scheduled round may retry. Normal shutdown cancellation sends no failure alert.
+
+### Telegram episode notifications
+
+Use a Telegram bot to send a MarkdownV2 notification to every configured recipient per episode download attempt. Messages include completion time with timezone, feed and episode titles/IDs, original publication time when available, elapsed time, source URL, and either file size or a failure reason. Publication time uses the same timezone as completion time. For YouTube this is the video's publication time, independent of when it was added to a playlist. Titles use the feed's custom title when configured. Existing files and filtered/skipped episodes do not generate notifications.
+
+```yaml
+telegram:
+  enabled: true
+  bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+  user_ids: [123456789, 987654321]
+  timeout: "10s"
+  failure_mention_user_ids: [] # e.g. [123456789, 987654321]
+```
+
+Each private recipient must start a chat with the bot and send `/start` before enabling notifications. `user_ids` lists Telegram `chat_id` values; for a group, add the bot and include the group's negative chat ID. Duplicate recipients receive each message once. Prefer `PODSYNC_TELEGRAM_BOT_TOKEN` to keep credentials out of shared configuration. All fields accept their corresponding `PODSYNC_TELEGRAM_*` environment variables. For example, `PODSYNC_TELEGRAM_USER_IDS="123456789,987654321,-1001234567890"` accepts comma- or space-separated IDs. The legacy `user_id` / `PODSYNC_TELEGRAM_USER_ID` remains supported when `user_ids` is absent; when both are configured, `user_ids` takes precedence. Enabling notifications requires a nonempty recipient list, with no zero IDs.
+
+Set `failure_mention_user_ids` to the positive Telegram user IDs of everyone who should be mentioned on episode download failures. This is a separate list from the notification recipients in `user_ids`. Successful downloads and feed update failures do not add mentions. The default empty list disables mentions. Telegram has no native `@all` mention or Bot API method to list all group members, so maintain the complete member list in configuration. IDs are deduplicated and rendered as [inline user mentions](https://core.telegram.org/bots/api#formatting-options), including users without usernames. Larger lists are split into batches of ten, each with the download failure details, within each recipient's notification timeout. The environment override `PODSYNC_TELEGRAM_FAILURE_MENTION_USER_IDS="123456789,987654321"` accepts comma- or space-separated IDs.
+
+Notifications use the [go-telegram/bot SDK](https://github.com/go-telegram/bot) without polling or webhooks. Markdown characters are escaped and long fields are truncated within Telegram's message limit. Telegram 429 responses retry up to three attempts within the configured timeout for each recipient. Other send errors are logged without changing download status or stopping subsequent downloads. A recipient's send failure or timeout does not stop delivery to the remaining recipients; errors are combined and identify the affected chat IDs. The timeout defaults to 10 seconds per recipient, including during shutdown. Network access uses Go's standard `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` settings.
 
 ### 🌍 Environment Variables
 
 Podsync supports the following environment variables for configuration and API keys:
 
+Static configuration fields also support `PODSYNC_` environment variables with dots replaced by underscores, such as `PODSYNC_SERVER_PORT`, `PODSYNC_DATABASE_DSN`, and `PODSYNC_LOG_DIR`. Dynamic feed entries are configured in YAML. API keys and R2 fields use the documented names below; alternate names are not supported. Empty environment values override file values.
+
 | Variable Name                | Description                                                                               | Example Value(s)                              |
 |------------------------------|-------------------------------------------------------------------------------------------|-----------------------------------------------|
-| `PODSYNC_CONFIG_PATH`        | Path to the configuration file (overrides `--config` CLI flag)                            | `/app/config.toml`                            |
+| `PODSYNC_CONFIG_PATH`        | Default configuration file path when `--config` is not specified                         | `/app/config.yaml`                            |
+| `PODSYNC_DATABASE_TYPE`      | Database driver                                                                        | `sqlite` or `mysql`                           |
+| `PODSYNC_DATABASE_DSN`       | Database connection string                                                             | `user:password@tcp(host:3306)/podsync?tls=true` |
+| `PODSYNC_SERVER_PORT`        | HTTP server port                                                                       | `8080`                                       |
+| `PODSYNC_LOG_DIR`            | Directory for daily YYYY-MM-DD.log files                                                | `log`                                        |
+| `PODSYNC_LOG_DEBUG`          | Debug logging; overridden by explicit `--debug` or `--debug=false`                       | `true`                                       |
+| `PODSYNC_NO_BANNER`          | Hide the startup banner                                                                | `true`                                       |
 | `PODSYNC_YOUTUBE_API_KEY`    | YouTube API key(s), space-separated for rotation                                          | `key1` or `key1 key2 key3` |
 | `PODSYNC_VIMEO_API_KEY`      | Vimeo API key(s), space-separated for rotation                                            | `key1` or `key1 key2`        |
 | `PODSYNC_SOUNDCLOUD_API_KEY` | SoundCloud API key(s), space-separated for rotation                                       | `soundcloud_key1 soundcloud_key2`             |
@@ -140,16 +293,21 @@ Podsync supports the following environment variables for configuration and API k
 
 ## 🚀 How to run
 
+The CLI uses Cobra. Run `podsync serve` for the scheduled service, `podsync update` for a single update, or `podsync init-db` to initialize database tables. Use `--help`, `--version`, or `completion zsh` for help, version information, and shell completion. `--config` (`-c`), `--debug`, and `--no-banner` work before or after a subcommand.
+
+Running `podsync` without a subcommand shows help. Single updates return a nonzero exit code if any feed fails.
+
+`init-db` preserves existing data by default and adds the nullable `source_published_at` column if missing. To delete all feed and episode data and recreate the Podsync tables, run `podsync init-db --config config.yaml --reset` (or combine `--reset` with `--type` and `--dsn`). This works with SQLite and MySQL; unrelated tables and downloaded media files are preserved. Other existing table structures are not migrated; `--reset` rebuilds them from the current schema.
 
 ### Build and run as binary:
 
-Make sure you have created the file `config.toml`. Also note the location of the `data_dir`. Depending on the operating system, you may have to choose a different location since `/app/data` might be not writable.
+Make sure you have created the file `config.yaml`. Also note the location of the `data_dir`. Depending on the operating system, you may have to choose a different location since `/app/data` might be not writable.
 
 ```
 $ git clone https://github.com/mxpv/podsync
 $ cd podsync
 $ make
-$ ./bin/podsync --config config.toml
+$ ./bin/podsync serve --config config.yaml
 ```
 
 ### 🐛 How to debug
@@ -165,7 +323,7 @@ $ docker run \
     -p 8080:8080 \
     -v $(pwd)/data:/app/data/ \
     -v $(pwd)/db:/app/db/ \
-    -v $(pwd)/config.toml:/app/config.toml \
+    -v $(pwd)/config.yaml:/app/config.yaml \
     ghcr.io/mxpv/podsync:latest
 ```
 
@@ -180,7 +338,7 @@ services:
     volumes:
       - ./data:/app/data/
       - ./db:/app/db/
-      - ./config.toml:/app/config.toml
+      - ./config.yaml:/app/config.yaml
     ports:
       - 8080:8080
 

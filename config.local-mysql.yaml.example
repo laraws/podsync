@@ -1,0 +1,53 @@
+# 本地文件存储 + 远程 MySQL。复制为 config.local-mysql.yaml 后填写凭据。
+# 相对路径以进程工作目录为准；真实配置已加入 Git 和 Docker 忽略列表。
+# tls=skip-verify 加密连接但不校验证书身份，适用于当前服务器自签名证书。
+# 配置受信任证书后可改为 tls=true。
+server:
+  port: 8080
+  bind_address: "127.0.0.1"
+  hostname: "http://localhost:8080"
+  web_ui: true
+  tls: false
+storage:
+  type: "local"
+  local:
+    data_dir: "./data"
+database:
+  type: "mysql"
+  dsn: "root:REPLACE_WITH_DB_PASSWORD@tcp(175.178.51.216:3306)/podsync-dev?charset=utf8mb4&parseTime=true&tls=skip-verify&timeout=5s&readTimeout=10s&writeTimeout=10s"
+  max_open_conns: 2
+  max_idle_conns: 1
+tokens:
+  youtube: "REPLACE_WITH_YOUTUBE_API_KEY"
+feeds:
+  PK1:
+    url: "https://www.youtube.com/playlist?list=PLJicmE8fK0Egu9kfkc8Dz_H_yKONuMHvu"
+    # API 分页大小，不是总下载数量上限。
+    page_size: 1
+    update_period: "1h"
+    # 启动时不立即同步，一小时后首次执行；没有设置清理策略。
+    cron_schedule: "@every 1h"
+    quality: "low"
+    format: "audio"
+    opml: true
+    # 不使用 cookies 时删除 --cookies 与 cookie.txt 两项。
+    youtube_dl_args:
+      - "--match-filter"
+      - "!is_live"
+      - "--cookies"
+      - "cookie.txt"
+downloader:
+  custom_binary: "yt-dlp"
+  self_update: false
+  timeout: 10
+log:
+  dir: "log"
+
+# 启用后逐个通知 episode 下载结果。先向 Bot 发送 /start。
+# 推荐通过 PODSYNC_TELEGRAM_BOT_TOKEN 设置 token。
+telegram:
+  enabled: false
+  bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
+  user_ids: [] # 例如 [123456789, 987654321]；群 ID 为负数。
+  failure_mention_user_ids: [] # 仅下载失败时 mention 的用户 ID。
+  timeout: "10s"

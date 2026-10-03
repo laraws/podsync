@@ -10,9 +10,9 @@
 6. Click `Generate`.
 ![Tokens](img/vimeo_token.png)
 7. Copy a token to your CLI's configuration file or set it as an environment variable.
-```toml
-[tokens]
-vimeo = "key1"
+```yaml
+tokens:
+  vimeo: "key1"
 ```
 Or set the environment variable:
 ```sh

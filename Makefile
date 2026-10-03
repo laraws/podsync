@@ -23,11 +23,11 @@ DATE := $(shell date)
 # -trimpath Remove all file system paths from the compiled binary
 # -tags netgo Use the netgo network stack (Go DNS resolver)
 #
-LDFLAGS := "-s -w -X 'main.version=${TAG}' -X 'main.commit=${COMMIT}' -X 'main.date=${DATE}' -X 'main.arch=${GOARCH}'"
+LDFLAGS := "-s -w -X 'github.com/mxpv/podsync/internal/buildinfo.Version=${TAG}' -X 'github.com/mxpv/podsync/internal/buildinfo.Commit=${COMMIT}' -X 'github.com/mxpv/podsync/internal/buildinfo.Date=${DATE}' -X 'github.com/mxpv/podsync/internal/buildinfo.Arch=${GOARCH}'"
 
 .PHONY: build
 build:
-	go build -trimpath -tags netgo -ldflags ${LDFLAGS} -o bin/podsync ./cmd/podsync
+	go build -trimpath -tags netgo -ldflags ${LDFLAGS} -o bin/podsync .
 
 # Build a local Docker image
 # Example:

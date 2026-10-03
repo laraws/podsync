@@ -8,26 +8,41 @@ Podsync is a Go-based service that converts YouTube, Vimeo, and SoundCloud chann
 
 ## Key Architecture Components
 
-### Main Application (`cmd/podsync/`)
-- **main.go**: Entry point with CLI argument parsing, signal handling, and service orchestration
-- **config.go**: TOML configuration loading and validation with defaults
+### Entry Point (`main.go`)
+- Creates the process signal context, initializes console logging, executes the CLI, and controls the exit code.
+- Application errors return through CLI to this entry point; packages do not exit the process.
 
-### Core Packages (`pkg/`)
-- **builder/**: Media downloaders for different platforms (YouTube, Vimeo, SoundCloud)
-- **feed/**: RSS/podcast feed generation and management, OPML export
-- **db/**: GORM-based SQL storage (SQLite/MySQL) for metadata and state
-- **fs/**: Storage abstraction supporting local filesystem and S3-compatible storage
-- **model/**: Core data structures and domain models
-- **ytdl/**: YouTube-dl wrapper for media downloading
+### CLI (`cmd/`)
+- **root.go**: Cobra root command, shared flags, command registration, and context execution
+- **service.go**: `serve`/`update` command adapters; resolves Viper configuration and invokes the application
+- **init_db.go**: Database command flags and database-only configuration resolution
+- Construct a new command/configuration reader for each invocation; avoid global Cobra command state.
 
-### Services (`services/`)
-- **update/**: Feed update orchestration and scheduling
-- **web/**: HTTP server for serving podcast feeds and media files
+### Internal Packages (`internal/`)
+- **app/**: Application composition, database initialization, feed update lifecycle, scheduling and shutdown
+- **logging/**: Console/file logging setup and cleanup; daily log rotation without background polling
+- **config/**: Central configuration types, YAML/Viper loading, environment bindings, defaults, and validation
+- **notify/**: Send-only Telegram SDK notifications for episode download results
+- **buildinfo/**: Shared build metadata for CLI version output and startup logs; injected by Makefile and GoReleaser
+
+Configuration defaults belong in `internal/config/defaults.go`. Domain enums stay in `internal/model`; runtime constants and mutable state stay with the component that owns them. Keep application-specific packages under `internal`.
+
+### Core Internal Packages
+- **source/**: Platform metadata adapters and API credential rotation
+- **downloader/**: yt-dlp subprocesses; no unmanaged background goroutines
+- **feed/**: Pure RSS and OPML rendering
+- **db/**: Fresh SQLite/MySQL schemas, metadata sync and download-state persistence
+- **storage/**: Atomic local publication and S3/R2 writes; independent of HTTP
+- **model/**: Domain metadata and episode state, without configuration settings
+- **update/**: Synchronization, downloads, retention, and publication orchestration
+- **scheduler/**: Serial Cron worker with per-feed trigger coalescing
+- **web/**: HTTP serving, embedded UI, indexed health query
+- **hooks/**: Post-download commands with process cancellation
 
 ### Key Dependencies
-- youtube-dl/yt-dlp for media downloading
+- yt-dlp and ffmpeg for media downloading
 - GORM with SQLite/MySQL for database storage
-- go-toml for configuration
+- Cobra for CLI commands and Viper/mapstructure for YAML configuration
 - robfig/cron for scheduling
 - AWS SDK for S3 storage
 
@@ -43,7 +58,7 @@ make                # Build and run tests
 ```bash
 make test           # Run all unit tests
 go test -v ./...    # Run tests with verbose output
-go test ./pkg/...   # Test specific packages
+go test ./internal/...   # Test specific packages
 ```
 
 ### Linting and Formatting
@@ -55,14 +70,15 @@ goimports -w .      # Organize imports and format
 
 ### Running
 ```bash
-./bin/podsync --config config.toml    # Run with config file
-./bin/podsync --debug                 # Run with debug logging
-./bin/podsync --headless              # Run once and exit (no web server)
+go run . serve -c config.local-mysql.yaml # Run from the root entry point
+./bin/podsync serve --config config.yaml # Run with config file
+./bin/podsync serve --debug           # Run with debug logging
+./bin/podsync update                  # Run once and exit (no web server)
 ```
 
-### Database Migration
+### Database Initialization
 ```bash
-./bin/podsync init-db --config config.toml                 # Initialize using config file
+./bin/podsync init-db --config config.yaml                 # Initialize using config file
 ./bin/podsync init-db --type sqlite --dsn /app/db/podsync.db  # Initialize SQLite directly
 ./bin/podsync init-db --type mysql --dsn "user:pass@tcp(127.0.0.1:3306)/podsync"  # Initialize MySQL
 ```
@@ -74,17 +90,17 @@ docker run -it --rm localhost/podsync:latest
 ```
 
 ### Development Debugging
-Use VS Code with the Go extension. The repository includes `.vscode/launch.json` with a "Debug Podsync" configuration that runs with `config.toml`.
+Use VS Code with the Go extension. The repository includes `.vscode/launch.json` with a "Debug Podsync" configuration that runs with `config.yaml`.
 
 ## Configuration
 
-The application uses TOML configuration files. See `config.toml.example` for all available options. Key sections:
-- `[server]`: Web server settings (port, hostname, TLS)
-- `[storage]`: Local or S3 storage configuration  
-- `[database]`: Database configuration (SQLite or MySQL via GORM)
-- `[tokens]`: API keys for YouTube/Vimeo
-- `[feeds]`: Feed definitions with URLs and settings
-- `[downloader]`: youtube-dl configuration
+The application uses YAML configuration files. See `config.yaml.example` for all available options. Key sections:
+- `server`: Web server settings (port, hostname, TLS)
+- `storage`: Local or S3 storage configuration
+- `database`: Database configuration (SQLite or MySQL via GORM)
+- `tokens`: API keys for YouTube/Vimeo
+- `feeds`: Feed definitions with URLs and settings
+- `downloader`: yt-dlp configuration
 
 ## Development Guidelines
 

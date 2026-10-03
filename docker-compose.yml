@@ -8,12 +8,13 @@ services:
       - 8080:8080
     volumes:
       - ./data:/app/data/
+      - ./log:/app/log/
       - ./db:/app/db/
-      - ./config.toml:/app/config.toml
-      - ./cookie.txt:/app/cookie.txt
-    # Database configuration is set in config.toml under [database].
+      - ./config.yaml:/app/config.yaml
+      - ./cookie.txt:/app/cookie.txt:ro
+    # Database configuration is set in config.yaml under the database section.
     # SQLite (default) stores data in /app/db/podsync.db (mapped to ./db).
-    # To use MySQL, set [database] type = "mysql" in config.toml and
+    # To use MySQL, set database.type to mysql in config.yaml and
     # uncomment the mysql service below.
     # environment:
     #   - PODSYNC_YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
