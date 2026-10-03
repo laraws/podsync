@@ -60,15 +60,19 @@ brew install yt-dlp ffmpeg go
 python3 scripts/build_latest.py
 ```
 
-This builds the current working tree for `linux/arm64` and `linux/amd64` and
+By default this builds the current working tree only for the machine's architecture
+(`linux/arm64` on ARM64, `linux/amd64` on AMD64) and
 pushes `ghcr.io/laraws/podsync:latest`, entirely on the machine running the script.
 It prints elapsed time. No Git tag or GitHub Actions run is created.
 
-Requires Python 3.8+, Git, and Docker with multi-platform Buildx support.
+Requires Python 3.8+, Git, and Docker with Buildx support.
 Log in to GHCR with `docker login ghcr.io` before publishing.
 
 ```bash
 python3 scripts/build_latest.py --dry-run
+
+# Explicitly build and push both architectures (requires multi-platform support).
+python3 scripts/build_latest.py --platform linux/arm64,linux/amd64
 ```
 
 The Dockerfile uses native Go cross-compilation with C cross-compilers to retain
