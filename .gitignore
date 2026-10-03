@@ -30,6 +30,8 @@ dist/
 venv/
 
 .DS_Store
+__pycache__/
+*.pyc
 /podsync
 podsync.log
 /log/

@@ -52,6 +52,41 @@ brew install yt-dlp ffmpeg go
 - [Podsync on QNAP NAS Guide](./docs/how_to_setup_podsync_on_qnap_nas.md)
 - [Schedule updates with cron](./docs/cron.md)
 
+## Publish a release
+
+### Build and push latest directly
+
+```bash
+python3 scripts/build_latest.py
+```
+
+This builds the current working tree for `linux/arm64` and `linux/amd64` and
+pushes `ghcr.io/laraws/podsync:latest`, entirely on the machine running the script.
+It prints elapsed time. No Git tag or GitHub Actions run is created.
+
+Requires Python 3.8+, Git, and Docker with multi-platform Buildx support.
+Log in to GHCR with `docker login ghcr.io` before publishing.
+
+```bash
+python3 scripts/build_latest.py --dry-run
+```
+
+The Dockerfile uses native Go cross-compilation with C cross-compilers to retain
+SQLite support, and caches Go modules and compilation output.
+
+### Publish a version through GitHub Actions
+
+After committing your changes, run `python3 scripts/release.py`. It runs the tests,
+increments the latest remote version's patch number, pushes the tag for the
+current commit, and waits for the Release workflow. The workflow publishes
+`linux/amd64` and `linux/arm64` images to `ghcr.io/laraws/podsync`, tagged with
+the release version and `latest`, plus binary release archives.
+
+Requires Python 3.9+, Git, Go, and GitHub CLI authenticated with `gh auth login`.
+No third-party Python packages are needed.
+Use `python3 scripts/release.py --dry-run` to preview, or
+`python3 scripts/release.py v2.9.0` to choose an explicit version.
+
 ## 🌙 Nightly builds
 
 Nightly builds uploaded every midnight from the `main` branch and available for testing:

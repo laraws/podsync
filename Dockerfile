@@ -1,13 +1,41 @@
-FROM golang:1.25-bookworm AS builder
+# syntax=docker/dockerfile:1
+FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS builder
 
-ARG TAG=nightly
-ARG COMMIT=""
+ARG BUILDARCH
+ARG TARGETOS
+ARG TARGETARCH
+
+# Compile Go natively and use a C cross-compiler for SQLite when needed.
+RUN if [ "$BUILDARCH" != "$TARGETARCH" ]; then \
+        case "$TARGETARCH" in \
+            amd64) packages="gcc-x86-64-linux-gnu libc6-dev-amd64-cross" ;; \
+            arm64) packages="gcc-aarch64-linux-gnu libc6-dev-arm64-cross" ;; \
+            *) echo "Unsupported target architecture: $TARGETARCH" >&2; exit 1 ;; \
+        esac && \
+        apt-get update && \
+        apt-get install -y --no-install-recommends $packages && \
+        rm -rf /var/lib/apt/lists/*; \
+    fi
 
 WORKDIR /build
 
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+
 COPY . .
 
-RUN make build
+ARG TAG=nightly
+ARG COMMIT=""
+# Limit package parallelism per target for builders with little memory.
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    if [ "$BUILDARCH" != "$TARGETARCH" ]; then \
+        case "$TARGETARCH" in \
+            amd64) export CC=x86_64-linux-gnu-gcc ;; \
+            arm64) export CC=aarch64-linux-gnu-gcc ;; \
+        esac; \
+    fi && \
+    CGO_ENABLED=1 GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOFLAGS=-p=1 make build
 
 
 FROM debian:trixie-slim
