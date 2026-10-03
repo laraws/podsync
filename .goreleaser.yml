@@ -1,3 +1,4 @@
+version: 2
 project_name: "Podsync"
 
 before:
@@ -36,13 +37,13 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end -}}
     format_overrides:
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: '{{ .Tag }}-next'
+  version_template: '{{ .Tag }}-next'
 
 changelog:
   sort: asc
@@ -59,6 +60,6 @@ release:
   footer: |
     # Docker images
     ```
-    docker pull ghcr.io/mxpv/podsync:{{ .Tag }}
-    docker pull ghcr.io/mxpv/podsync:latest
+    docker pull ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:{{ .Tag }}
+    docker pull ghcr.io/{{ .Env.GITHUB_REPOSITORY }}:latest
     ```
