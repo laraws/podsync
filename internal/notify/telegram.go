@@ -30,10 +30,11 @@ type EpisodeNotifier interface {
 }
 
 type Telegram struct {
-	bot     *bot.Bot
-	token   string
-	userID  int64
-	timeout time.Duration
+	bot                   *bot.Bot
+	token                 string
+	userIDs               []int64
+	timeout               time.Duration
+	failureMentionUserIDs []int64
 }
 
 // NewTelegram creates a send-only bot. It does not poll updates or contact
@@ -42,8 +43,14 @@ func NewTelegram(cfg config.Telegram) (*Telegram, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
-	if strings.TrimSpace(cfg.BotToken) == "" || cfg.UserID == 0 {
-		return nil, fmt.Errorf("Telegram requires bot_token and a nonzero user_id")
+	ids := cfg.RecipientIDs()
+	if strings.TrimSpace(cfg.BotToken) == "" || len(ids) == 0 {
+		return nil, fmt.Errorf("Telegram requires bot_token and at least one user_ids recipient")
+	}
+	for _, id := range ids {
+		if id == 0 {
+			return nil, fmt.Errorf("Telegram user_ids must contain nonzero chat IDs")
+		}
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = config.DefaultTelegramTimeout
@@ -55,25 +62,55 @@ func NewTelegram(cfg config.Telegram) (*Telegram, error) {
 	if err != nil {
 		return nil, fmt.Errorf("initialize Telegram bot: %s", strings.ReplaceAll(err.Error(), cfg.BotToken, "[redacted]"))
 	}
-	return &Telegram{bot: b, token: cfg.BotToken, userID: cfg.UserID, timeout: cfg.Timeout}, nil
+	var mentionIDs []int64
+	seen := make(map[int64]bool)
+	for _, id := range cfg.FailureMentionUserIDs {
+		if id <= 0 {
+			return nil, fmt.Errorf("Telegram failure_mention_user_ids must contain positive user IDs")
+		}
+		if !seen[id] {
+			mentionIDs = append(mentionIDs, id)
+			seen[id] = true
+		}
+	}
+	return &Telegram{bot: b, token: cfg.BotToken, userIDs: ids, timeout: cfg.Timeout, failureMentionUserIDs: mentionIDs}, nil
 }
 
 func (t *Telegram) NotifyEpisode(ctx context.Context, result EpisodeResult) error {
 	if t == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, t.timeout)
-	defer cancel()
 	// SDK errors and download errors may contain the token; never expose it.
 	if result.Err != nil {
 		message, original := errorText(result.Err)
 		result.Err = displayError{message: t.redact(message), original: t.redact(original)}
 	}
+	messages := episodeMessages(result, t.failureMentionUserIDs)
+	var sendErrors []error
+	for _, id := range t.userIDs {
+		if ctx.Err() != nil {
+			return errors.Join(append(sendErrors, ctx.Err())...)
+		}
+		// Give each recipient its own timeout so a failed/slow recipient cannot
+		// consume the time available to the remaining recipients.
+		sendCtx, cancel := context.WithTimeout(ctx, t.timeout)
+		for _, message := range messages {
+			if err := t.sendMessage(sendCtx, id, message); err != nil {
+				sendErrors = append(sendErrors, fmt.Errorf("Telegram chat %d: %w", id, err))
+				break
+			}
+		}
+		cancel()
+	}
+	return errors.Join(sendErrors...)
+}
+
+func (t *Telegram) sendMessage(ctx context.Context, chatID int64, message string) error {
 	disablePreview := true
 	params := &bot.SendMessageParams{
-		ChatID:             t.userID,
+		ChatID:             chatID,
 		ParseMode:          models.ParseModeMarkdown,
-		Text:               episodeMessage(result),
+		Text:               message,
 		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: &disablePreview},
 	}
 	for attempt := 0; attempt < 3; attempt++ {
@@ -102,6 +139,26 @@ func (t *Telegram) NotifyEpisode(ctx context.Context, result EpisodeResult) erro
 }
 
 func (t *Telegram) redact(s string) string { return strings.ReplaceAll(s, t.token, "[redacted]") }
+
+func episodeMessages(r EpisodeResult, mentionIDs []int64) []string {
+	message := episodeMessage(r)
+	if r.Err == nil || r.EpisodeID == "" || len(mentionIDs) == 0 {
+		return []string{message}
+	}
+	// Ten int64 ID labels add at most 220 rendered characters. Combined with
+	// the bounded episode fields this stays below Telegram's 4096-unit limit.
+	// Split larger lists so every configured user is mentioned without truncation.
+	const mentionsPerMessage = 10
+	var messages []string
+	for start := 0; start < len(mentionIDs); start += mentionsPerMessage {
+		var mentions strings.Builder
+		for _, id := range mentionIDs[start:min(start+mentionsPerMessage, len(mentionIDs))] {
+			fmt.Fprintf(&mentions, " [@%d](tg://user?id=%d)", id, id)
+		}
+		messages = append(messages, message+"\n*提醒：*"+mentions.String())
+	}
+	return messages
+}
 
 func episodeMessage(r EpisodeResult) string {
 	status := "✅ *Episode 下载成功*"

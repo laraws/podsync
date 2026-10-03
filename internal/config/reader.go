@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -152,8 +153,26 @@ func (r *Reader) DatabaseConfig(path string) (*Database, error) {
 func configDecodeHook() viper.DecoderConfigOption {
 	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
+		userIDSliceHook,
 		stringSliceHook,
 	))
+}
+
+// Telegram IDs in environment variables accept spaces or commas as separators.
+func userIDSliceHook(from, to reflect.Type, value any) (any, error) {
+	if from.Kind() != reflect.String || to != reflect.TypeOf([]int64{}) {
+		return value, nil
+	}
+	parts := strings.Fields(strings.ReplaceAll(value.(string), ",", " "))
+	ids := make([]int64, len(parts))
+	for i, part := range parts {
+		id, err := strconv.ParseInt(part, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid Telegram user ID %q: %w", part, err)
+		}
+		ids[i] = id
+	}
+	return ids, nil
 }
 
 // Token strings from files or environment may contain space-separated keys.

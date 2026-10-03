@@ -83,19 +83,22 @@ PODSYNC_LOG_DIR=log \
 
 ### Telegram 下载通知
 
-本地实际配置已启用 Telegram。每次 episode 下载完成后发送一条 MarkdownV2 消息，包含完成时间及时区、feed/episode 标题和 ID、耗时、来源链接；成功显示文件大小，失败显示原因。自定义 feed 标题优先使用。已存在、被过滤或跳过的 episode 不通知；后续重试有新的下载结果时再次通知。
+本地实际配置已启用 Telegram。每次 episode 下载完成后向 `user_ids` 中的所有收件人发送 MarkdownV2 消息，重复 ID 自动去重。消息包含完成时间及时区、feed/episode 标题和 ID、耗时、来源链接；成功显示文件大小，失败显示原因。自定义 feed 标题优先使用。已存在、被过滤或跳过的 episode 不通知；后续重试有新的下载结果时再次通知。
 
 ```yaml
 telegram:
   enabled: true
   bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
-  user_id: 123456789
+  user_ids: [123456789, 987654321]
+  failure_mention_user_ids: [] # 填入下载失败时要 mention 的用户 ID。
   timeout: "10s"
 ```
 
-首次使用先向 Bot 发送 `/start`。Bot token 可通过 `PODSYNC_TELEGRAM_BOT_TOKEN` 覆盖，其他变量为 `PODSYNC_TELEGRAM_ENABLED`、`PODSYNC_TELEGRAM_USER_ID`、`PODSYNC_TELEGRAM_TIMEOUT`。发送使用 Go SDK，无需设置 webhook 或启动 Bot 轮询。
+每个私聊收件人首次使用先向 Bot 发送 `/start`；群通知需要把 Bot 加入群，并在 `user_ids` 中填入负数的群 chat ID。Bot token 可通过 `PODSYNC_TELEGRAM_BOT_TOKEN` 覆盖，其他变量为 `PODSYNC_TELEGRAM_ENABLED`、`PODSYNC_TELEGRAM_USER_IDS`、`PODSYNC_TELEGRAM_TIMEOUT`。`PODSYNC_TELEGRAM_USER_IDS="123456789,987654321"` 支持逗号或空格分隔。旧的 `user_id` 和 `PODSYNC_TELEGRAM_USER_ID` 仍兼容；同时配置时优先使用 `user_ids`。发送使用 Go SDK，无需设置 webhook 或启动 Bot 轮询。
 
-下载器报错（包括 HTTP 429）、文件检查/保存失败和下载状态写入失败都会发送失败通知。下载后的自定义钩子报错仍只记录日志，下载结果保持成功。Telegram 限流最多发送三次，并遵守 `retry_after`；整个通知最长等待 `timeout`（默认 10 秒）。通知发送失败写入日志，不改变下载状态、不阻止后续下载。进程退出时也会尝试发送已完成下载的结果，并受同一超时限制。
+`failure_mention_user_ids` 是独立的 mention 名单，仅 episode 下载失败时添加 mention，成功及 Feed 更新失败时不添加。填写全体成员的正数用户 ID 即可逐个 mention；Telegram 没有原生 `@all`，需要自行维护名单。名单去重后按每批十人发送，避免超过消息长度限制。对应环境变量为 `PODSYNC_TELEGRAM_FAILURE_MENTION_USER_IDS`，也支持逗号或空格分隔。
+
+下载器报错（包括 HTTP 429）、文件检查/保存失败和下载状态写入失败都会发送失败通知。下载后的自定义钩子报错仍只记录日志，下载结果保持成功。Telegram 限流最多发送三次，并遵守 `retry_after`；每个收件人的通知最长等待 `timeout`（默认 10 秒）。某个收件人失败或超时后仍会继续发送给其他收件人，错误中包含对应 chat ID。通知发送失败写入日志，不改变下载状态、不阻止后续下载。进程退出时也会尝试发送已完成下载的结果，每个收件人受同一超时限制。
 
 若所在网络无法直接访问 Telegram，可设置标准 `HTTPS_PROXY` / `HTTP_PROXY` / `NO_PROXY` 环境变量。显式实发自测命令会发送两条标注“模拟事件，无实际下载”的消息，正常单元测试不发送真实消息：
 

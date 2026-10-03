@@ -208,19 +208,22 @@ the next scheduled round may retry. Normal shutdown cancellation sends no failur
 
 ### Telegram episode notifications
 
-Use a Telegram bot to receive one MarkdownV2 message per episode download attempt. Messages include completion time with timezone, feed and episode titles/IDs, elapsed time, source URL, and either file size or a failure reason. Titles use the feed's custom title when configured. Existing files and filtered/skipped episodes do not generate notifications.
+Use a Telegram bot to send a MarkdownV2 notification to every configured recipient per episode download attempt. Messages include completion time with timezone, feed and episode titles/IDs, elapsed time, source URL, and either file size or a failure reason. Titles use the feed's custom title when configured. Existing files and filtered/skipped episodes do not generate notifications.
 
 ```yaml
 telegram:
   enabled: true
   bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
-  user_id: 123456789
+  user_ids: [123456789, 987654321]
   timeout: "10s"
+  failure_mention_user_ids: [] # e.g. [123456789, 987654321]
 ```
 
-Start a private chat with the bot and send `/start` before enabling notifications. `user_id` is used as Telegram's `chat_id`. Prefer `PODSYNC_TELEGRAM_BOT_TOKEN` to keep credentials out of shared configuration. All four fields accept their corresponding `PODSYNC_TELEGRAM_*` environment variables.
+Each private recipient must start a chat with the bot and send `/start` before enabling notifications. `user_ids` lists Telegram `chat_id` values; for a group, add the bot and include the group's negative chat ID. Duplicate recipients receive each message once. Prefer `PODSYNC_TELEGRAM_BOT_TOKEN` to keep credentials out of shared configuration. All fields accept their corresponding `PODSYNC_TELEGRAM_*` environment variables. For example, `PODSYNC_TELEGRAM_USER_IDS="123456789,987654321,-1001234567890"` accepts comma- or space-separated IDs. The legacy `user_id` / `PODSYNC_TELEGRAM_USER_ID` remains supported when `user_ids` is absent; when both are configured, `user_ids` takes precedence. Enabling notifications requires a nonempty recipient list, with no zero IDs.
 
-Notifications use the [go-telegram/bot SDK](https://github.com/go-telegram/bot) without polling or webhooks. Markdown characters are escaped and long fields are truncated within Telegram's message limit. Telegram 429 responses retry up to three attempts within the configured total timeout; other send errors are logged without changing download status or stopping subsequent downloads. The timeout defaults to 10 seconds, including during shutdown. Network access uses Go's standard `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` settings.
+Set `failure_mention_user_ids` to the positive Telegram user IDs of everyone who should be mentioned on episode download failures. This is a separate list from the notification recipients in `user_ids`. Successful downloads and feed update failures do not add mentions. The default empty list disables mentions. Telegram has no native `@all` mention or Bot API method to list all group members, so maintain the complete member list in configuration. IDs are deduplicated and rendered as [inline user mentions](https://core.telegram.org/bots/api#formatting-options), including users without usernames. Larger lists are split into batches of ten, each with the download failure details, within each recipient's notification timeout. The environment override `PODSYNC_TELEGRAM_FAILURE_MENTION_USER_IDS="123456789,987654321"` accepts comma- or space-separated IDs.
+
+Notifications use the [go-telegram/bot SDK](https://github.com/go-telegram/bot) without polling or webhooks. Markdown characters are escaped and long fields are truncated within Telegram's message limit. Telegram 429 responses retry up to three attempts within the configured timeout for each recipient. Other send errors are logged without changing download status or stopping subsequent downloads. A recipient's send failure or timeout does not stop delivery to the remaining recipients; errors are combined and identify the affected chat IDs. The timeout defaults to 10 seconds per recipient, including during shutdown. Network access uses Go's standard `HTTPS_PROXY`/`HTTP_PROXY`/`NO_PROXY` settings.
 
 ### 🌍 Environment Variables
 

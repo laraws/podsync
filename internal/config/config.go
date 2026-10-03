@@ -28,11 +28,24 @@ func LoadDatabaseConfig(path string) (*Database, error) {
 func (c *Config) validate() error {
 	var result []error
 	if c.Telegram.Enabled {
-		if strings.TrimSpace(c.Telegram.BotToken) == "" || c.Telegram.UserID == 0 {
-			result = append(result, errors.New("Telegram notifications require bot_token and a nonzero user_id"))
+		ids := c.Telegram.RecipientIDs()
+		if strings.TrimSpace(c.Telegram.BotToken) == "" || len(ids) == 0 {
+			result = append(result, errors.New("Telegram notifications require bot_token and at least one user_ids recipient"))
+		}
+		for _, id := range ids {
+			if id == 0 {
+				result = append(result, errors.New("Telegram user_ids must contain nonzero chat IDs"))
+				break
+			}
 		}
 		if c.Telegram.Timeout <= 0 {
 			result = append(result, errors.New("Telegram timeout must be positive"))
+		}
+		for _, id := range c.Telegram.FailureMentionUserIDs {
+			if id <= 0 {
+				result = append(result, errors.New("Telegram failure_mention_user_ids must contain positive user IDs"))
+				break
+			}
 		}
 	}
 

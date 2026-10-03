@@ -48,5 +48,6 @@ log:
 telegram:
   enabled: false
   bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
-  user_id: 0
+  user_ids: [] # 例如 [123456789, 987654321]；群 ID 为负数。
+  failure_mention_user_ids: [] # 仅下载失败时 mention 的用户 ID。
   timeout: "10s"

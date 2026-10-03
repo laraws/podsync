@@ -184,15 +184,31 @@ func TestYAMLOnlyAndStrictDocuments(t *testing.T) {
 func TestTelegramConfiguration(t *testing.T) {
 	t.Setenv("PODSYNC_TELEGRAM_ENABLED", "true")
 	t.Setenv("PODSYNC_TELEGRAM_BOT_TOKEN", "123:environment-key")
-	t.Setenv("PODSYNC_TELEGRAM_USER_ID", "9876543210")
+	t.Setenv("PODSYNC_TELEGRAM_USER_IDS", "9876543210,-100123 456")
 	t.Setenv("PODSYNC_TELEGRAM_TIMEOUT", "3s")
+	t.Setenv("PODSYNC_TELEGRAM_FAILURE_MENTION_USER_IDS", "123,9876543210 456")
 	path := writeConfig(t, "storage:\n  local:\n    data_dir: ./data\nfeeds:\n  PK1:\n    url: https://example.com/feed\ntelegram:\n  bot_token: file-key\n")
 	cfg, err := LoadConfig(path)
 	require.NoError(t, err)
 	assert.True(t, cfg.Telegram.Enabled)
 	assert.Equal(t, "123:environment-key", cfg.Telegram.BotToken)
-	assert.EqualValues(t, 9876543210, cfg.Telegram.UserID)
+	assert.Equal(t, []int64{9876543210, -100123, 456}, cfg.Telegram.UserIDs)
 	assert.Equal(t, 3*time.Second, cfg.Telegram.Timeout)
+	assert.Equal(t, []int64{123, 9876543210, 456}, cfg.Telegram.FailureMentionUserIDs)
+}
+
+func TestTelegramFailureMentionConfiguration(t *testing.T) {
+	base := "storage:\n  local:\n    data_dir: ./data\nfeeds:\n  PK1:\n    url: https://example.com/feed\ntelegram:\n  enabled: true\n  bot_token: test-key\n  user_id: -100123\n"
+	cfg, err := LoadConfig(writeConfig(t, base+"  failure_mention_user_ids: [123, 9876543210]\n"))
+	require.NoError(t, err)
+	assert.Equal(t, []int64{123, 9876543210}, cfg.Telegram.FailureMentionUserIDs)
+	for _, ids := range []string{"[0]", "[-1]", "[invalid]"} {
+		_, err := LoadConfig(writeConfig(t, base+"  failure_mention_user_ids: "+ids+"\n"))
+		require.Error(t, err)
+	}
+	t.Setenv("PODSYNC_TELEGRAM_FAILURE_MENTION_USER_IDS", "123,invalid")
+	_, err = LoadConfig(writeConfig(t, base))
+	require.ErrorContains(t, err, "invalid Telegram user ID")
 }
 
 func TestTelegramValidation(t *testing.T) {
@@ -208,6 +224,49 @@ func TestTelegramValidation(t *testing.T) {
 	cfg, err := LoadConfig(writeConfig(t, base+"telegram:\n  enabled: true\n  bot_token: test-key\n  user_id: 1\n"))
 	require.NoError(t, err)
 	assert.Equal(t, DefaultTelegramTimeout, cfg.Telegram.Timeout)
+}
+
+func TestTelegramRecipientConfiguration(t *testing.T) {
+	base := "storage:\n  local:\n    data_dir: ./data\nfeeds:\n  PK1:\n    url: https://example.com/feed\ntelegram:\n  enabled: true\n  bot_token: test-key\n"
+	for _, test := range []struct {
+		name    string
+		section string
+		want    []int64
+	}{
+		{name: "multiple recipients", section: "  user_ids: [123, -100123, 9876543210]\n", want: []int64{123, -100123, 9876543210}},
+		{name: "deduplicated", section: "  user_ids: [123, -100123, 123]\n", want: []int64{123, -100123}},
+		{name: "legacy", section: "  user_id: 123\n", want: []int64{123}},
+		{name: "new setting takes precedence", section: "  user_id: 123\n  user_ids: [456, 789]\n", want: []int64{456, 789}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg, err := LoadConfig(writeConfig(t, base+test.section))
+			require.NoError(t, err)
+			assert.Equal(t, test.want, cfg.Telegram.RecipientIDs())
+		})
+	}
+	for _, section := range []string{
+		"  user_ids: []\n", "  user_ids: [0]\n", "  user_ids: [123, 0]\n", "  user_ids: [invalid]\n", "  user_id: 123\n  user_ids: []\n",
+	} {
+		_, err := LoadConfig(writeConfig(t, base+section))
+		require.Error(t, err, section)
+	}
+	t.Run("legacy environment", func(t *testing.T) {
+		t.Setenv("PODSYNC_TELEGRAM_USER_ID", "9876543210")
+		cfg, err := LoadConfig(writeConfig(t, base))
+		require.NoError(t, err)
+		assert.Equal(t, []int64{9876543210}, cfg.Telegram.RecipientIDs())
+	})
+	t.Run("environment overrides array", func(t *testing.T) {
+		t.Setenv("PODSYNC_TELEGRAM_USER_IDS", "456,-100123")
+		cfg, err := LoadConfig(writeConfig(t, base+"  user_ids: [123]\n"))
+		require.NoError(t, err)
+		assert.Equal(t, []int64{456, -100123}, cfg.Telegram.RecipientIDs())
+	})
+	t.Run("invalid environment", func(t *testing.T) {
+		t.Setenv("PODSYNC_TELEGRAM_USER_IDS", "123,invalid")
+		_, err := LoadConfig(writeConfig(t, base))
+		require.ErrorContains(t, err, "invalid Telegram user ID")
+	})
 }
 
 func TestStartupRejectsInvalidPolicyAndRemovedOptions(t *testing.T) {

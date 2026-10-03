@@ -141,12 +141,18 @@ log:
   dir: "log"
   debug: false
 
-# Send each episode's download result to a Telegram user via a send-only bot.
+# Send each episode's download result to a Telegram user or group via a send-only bot.
 # Environment overrides: PODSYNC_TELEGRAM_ENABLED, PODSYNC_TELEGRAM_BOT_TOKEN,
-# PODSYNC_TELEGRAM_USER_ID, PODSYNC_TELEGRAM_TIMEOUT.
+# PODSYNC_TELEGRAM_USER_IDS (space- or comma-separated IDs), PODSYNC_TELEGRAM_TIMEOUT,
+# PODSYNC_TELEGRAM_FAILURE_MENTION_USER_IDS (space- or comma-separated IDs).
 telegram:
   enabled: false
   bot_token: "REPLACE_WITH_TELEGRAM_BOT_TOKEN"
-  user_id: 0
-  # Total notification timeout, including 429 retry waits.
+  # Send to every listed user or group. Duplicate IDs are sent to once.
+  user_ids: [] # e.g. [123456789, 987654321, -1001234567890]
+  # Mention every listed user only when an episode download fails.
+  # For groups, add the group's negative chat ID to user_ids and list members here.
+  # Telegram has no native @all mention or API to list every group member.
+  failure_mention_user_ids: [] # e.g. [123456789, 987654321]
+  # Notification timeout per recipient, including 429 retry waits.
   timeout: "10s"

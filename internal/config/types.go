@@ -31,9 +31,31 @@ type Config struct {
 type Telegram struct {
 	Enabled  bool   `mapstructure:"enabled"`
 	BotToken string `mapstructure:"bot_token"`
-	UserID   int64  `mapstructure:"user_id"`
-	// Timeout bounds the entire notification, including rate-limit retries.
+	// UserIDs contains notification recipients (positive user IDs or negative group IDs).
+	UserIDs []int64 `mapstructure:"user_ids"`
+	// UserID is the deprecated single-recipient setting, used only if UserIDs is absent.
+	UserID int64 `mapstructure:"user_id"`
+	// FailureMentionUserIDs lists all users to mention only on episode download failures.
+	FailureMentionUserIDs []int64 `mapstructure:"failure_mention_user_ids"`
+	// Timeout bounds each recipient's notification, including rate-limit retries.
 	Timeout time.Duration `mapstructure:"timeout"`
+}
+
+// RecipientIDs resolves the legacy setting and removes duplicate recipients.
+func (t Telegram) RecipientIDs() []int64 {
+	ids := t.UserIDs
+	if ids == nil && t.UserID != 0 {
+		ids = []int64{t.UserID}
+	}
+	var recipients []int64
+	seen := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		if !seen[id] {
+			recipients = append(recipients, id)
+			seen[id] = true
+		}
+	}
+	return recipients
 }
 
 // Log writes to the console, or daily files when Dir is set.

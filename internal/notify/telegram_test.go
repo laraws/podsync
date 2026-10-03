@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,14 +24,89 @@ import (
 
 func testTelegram(t *testing.T, timeout time.Duration, handler http.HandlerFunc) *Telegram {
 	t.Helper()
+	return testTelegramConfig(t, config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{9876543210}, Timeout: timeout}, handler)
+}
+
+func testTelegramConfig(t *testing.T, cfg config.Telegram, handler http.HandlerFunc) *Telegram {
+	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserID: 9876543210, Timeout: timeout}
 	notifier, err := NewTelegram(cfg)
 	require.NoError(t, err)
-	notifier.bot, err = bot.New(cfg.BotToken, bot.WithSkipGetMe(), bot.WithServerURL(server.URL), bot.WithHTTPClient(timeout, server.Client()))
+	notifier.bot, err = bot.New(cfg.BotToken, bot.WithSkipGetMe(), bot.WithServerURL(server.URL), bot.WithHTTPClient(cfg.Timeout, server.Client()))
 	require.NoError(t, err)
 	return notifier
+}
+
+func TestTelegramFailureMentions(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		result      EpisodeResult
+		ids         []int64
+		wantMention bool
+	}{
+		{name: "download failure", result: EpisodeResult{EpisodeID: "ep1", Err: errors.New("download failed")}, ids: []int64{123, 456, 123}, wantMention: true},
+		{name: "success", result: EpisodeResult{EpisodeID: "ep1"}, ids: []int64{123, 456}},
+		{name: "feed failure", result: EpisodeResult{Err: errors.New("feed failed")}, ids: []int64{123, 456}},
+		{name: "unconfigured", result: EpisodeResult{EpisodeID: "ep1", Err: errors.New("download failed")}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var calls atomic.Int32
+			cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{-1001234567890}, Timeout: time.Second, FailureMentionUserIDs: test.ids}
+			notifier := testTelegramConfig(t, cfg, func(w http.ResponseWriter, r *http.Request) {
+				calls.Add(1)
+				require.NoError(t, r.ParseMultipartForm(65536))
+				assert.Equal(t, "-1001234567890", r.FormValue("chat_id"))
+				assert.Equal(t, "MarkdownV2", r.FormValue("parse_mode"))
+				text := r.FormValue("text")
+				if test.wantMention {
+					assert.Contains(t, text, "[@123](tg://user?id=123)")
+					assert.Contains(t, text, "[@456](tg://user?id=456)")
+					assert.Equal(t, 1, strings.Count(text, "tg://user?id=123"))
+				} else {
+					assert.NotContains(t, text, "tg://user?id=")
+				}
+				fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+			})
+			require.NoError(t, notifier.NotifyEpisode(context.Background(), test.result))
+			assert.EqualValues(t, 1, calls.Load())
+		})
+	}
+	t.Run("invalid user IDs", func(t *testing.T) {
+		for _, id := range []int64{0, -123} {
+			_, err := NewTelegram(config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{123}, FailureMentionUserIDs: []int64{id}})
+			require.ErrorContains(t, err, "positive user IDs")
+		}
+	})
+}
+
+func TestTelegramLargeFailureMentionList(t *testing.T) {
+	var ids []int64
+	for i := int64(0); i < 21; i++ {
+		ids = append(ids, 9223372036854775807-i)
+	}
+	long := strings.Repeat("😀_*", 3000)
+	failure := &downloader.Failure{Reason: long, Output: "ERROR: " + long, Cause: errors.New("download failed")}
+	result := EpisodeResult{FeedID: long, FeedTitle: long, EpisodeID: long, EpisodeTitle: long, EpisodeURL: long, Err: failure}
+	var texts []string
+	cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{-100123}, Timeout: time.Second, FailureMentionUserIDs: ids}
+	notifier := testTelegramConfig(t, cfg, func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseMultipartForm(65536))
+		texts = append(texts, r.FormValue("text"))
+		fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+	})
+	require.NoError(t, notifier.NotifyEpisode(context.Background(), result))
+	require.Len(t, texts, 3)
+	links := regexp.MustCompile(`\[(@\d+)\]\(tg://user\?id=\d+\)`)
+	for _, text := range texts {
+		assert.Contains(t, text, "下载失败")
+		plain := links.ReplaceAllString(text, "$1")
+		plain = strings.NewReplacer(`\`, "", "*", "").Replace(plain)
+		assert.LessOrEqual(t, len(utf16.Encode([]rune(plain))), 4096)
+	}
+	for _, id := range ids {
+		assert.Equal(t, 1, strings.Count(strings.Join(texts, "\n"), fmt.Sprintf("tg://user?id=%d)", id)))
+	}
 }
 
 func TestTelegramSDKMessage(t *testing.T) {
@@ -136,6 +212,84 @@ func TestTelegramDisabled(t *testing.T) {
 	require.NoError(t, notifier.NotifyEpisode(context.Background(), EpisodeResult{}))
 	_, err = NewTelegram(config.Telegram{Enabled: true})
 	require.Error(t, err)
+}
+
+func TestTelegramMultipleRecipients(t *testing.T) {
+	for _, failure := range []bool{false, true} {
+		t.Run(fmt.Sprint(failure), func(t *testing.T) {
+			var chats []string
+			cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{123, -100123, 456, 123}, Timeout: time.Second, FailureMentionUserIDs: []int64{789}}
+			notifier := testTelegramConfig(t, cfg, func(w http.ResponseWriter, r *http.Request) {
+				require.NoError(t, r.ParseMultipartForm(65536))
+				chats = append(chats, r.FormValue("chat_id"))
+				if failure {
+					assert.Contains(t, r.FormValue("text"), "[@789](tg://user?id=789)")
+				} else {
+					assert.NotContains(t, r.FormValue("text"), "tg://user?id=")
+				}
+				fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+			})
+			result := EpisodeResult{EpisodeID: "ep1"}
+			if failure {
+				result.Err = errors.New("download failed")
+			}
+			require.NoError(t, notifier.NotifyEpisode(context.Background(), result))
+			assert.Equal(t, []string{"123", "-100123", "456"}, chats)
+		})
+	}
+	t.Run("recipient failure does not stop delivery", func(t *testing.T) {
+		var chats []string
+		cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{123, 456, 789}, Timeout: time.Second}
+		notifier := testTelegramConfig(t, cfg, func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, r.ParseMultipartForm(65536))
+			chat := r.FormValue("chat_id")
+			chats = append(chats, chat)
+			if chat != "456" {
+				w.WriteHeader(403)
+				fmt.Fprint(w, `{"ok":false,"error_code":403,"description":"blocked: 123:fake-secret"}`)
+				return
+			}
+			fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+		})
+		err := notifier.NotifyEpisode(context.Background(), EpisodeResult{EpisodeID: "ep1"})
+		require.ErrorContains(t, err, "Telegram chat 123")
+		require.ErrorContains(t, err, "Telegram chat 789")
+		assert.NotContains(t, err.Error(), "fake-secret")
+		assert.Equal(t, []string{"123", "456", "789"}, chats)
+	})
+	t.Run("recipient timeout does not stop delivery", func(t *testing.T) {
+		var chats []string
+		cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: []int64{123, 456}, Timeout: 100 * time.Millisecond}
+		notifier := testTelegramConfig(t, cfg, func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, r.ParseMultipartForm(65536))
+			chat := r.FormValue("chat_id")
+			chats = append(chats, chat)
+			if chat == "123" {
+				w.WriteHeader(429)
+				fmt.Fprint(w, `{"ok":false,"error_code":429,"parameters":{"retry_after":100}}`)
+				return
+			}
+			fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+		})
+		err := notifier.NotifyEpisode(context.Background(), EpisodeResult{})
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Equal(t, []string{"123", "456"}, chats)
+	})
+	t.Run("legacy recipient", func(t *testing.T) {
+		cfg := config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserID: 123, Timeout: time.Second}
+		notifier := testTelegramConfig(t, cfg, func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, r.ParseMultipartForm(65536))
+			assert.Equal(t, "123", r.FormValue("chat_id"))
+			fmt.Fprint(w, `{"ok":true,"result":{"message_id":1}}`)
+		})
+		require.NoError(t, notifier.NotifyEpisode(context.Background(), EpisodeResult{}))
+	})
+	t.Run("invalid recipients", func(t *testing.T) {
+		for _, ids := range [][]int64{{}, {0}, {123, 0}} {
+			_, err := NewTelegram(config.Telegram{Enabled: true, BotToken: "123:fake-secret", UserIDs: ids})
+			require.Error(t, err)
+		}
+	})
 }
 
 func TestFeedFailureNotification(t *testing.T) {
