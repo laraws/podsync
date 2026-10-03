@@ -103,7 +103,8 @@ func TestRunInitDBResetLegacySchema(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	args := []string{"init-db", "--type", "sqlite", "--dsn", path, "--config", filepath.Join(t.TempDir(), "missing.yaml")}
+	args := make([]string, 0, 8)
+	args = append(args, "init-db", "--type", "sqlite", "--dsn", path, "--config", filepath.Join(t.TempDir(), "missing.yaml"))
 	cmd := newRootCommand(runService)
 	cmd.SetArgs(args)
 	require.Error(t, cmd.Execute())
