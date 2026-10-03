@@ -54,12 +54,12 @@ func TestTelegramSDKMessage(t *testing.T) {
 					assert.Contains(t, text, `HTTP 429: unavailable\_video`)
 				} else {
 					assert.Contains(t, text, "下载成功")
-					assert.Contains(t, text, "1024 bytes")
+					assert.Contains(t, text, `*文件大小：* 6\.19 MiB`)
 					assert.NotContains(t, text, "失败原因")
 				}
 				fmt.Fprint(w, `{"ok":true,"result":{"message_id":1,"chat":{"id":9876543210,"type":"private"}}}`)
 			})
-			event := EpisodeResult{FeedID: "PK1", FeedTitle: `News_[1]\path`, EpisodeID: "ep1", EpisodeTitle: "Episode*(测试)!", EpisodeURL: "https://example.com/watch?v=1", At: time.Date(2026, 10, 1, 21, 0, 0, 0, time.FixedZone("CST", 8*3600)), Duration: time.Second, Size: 1024}
+			event := EpisodeResult{FeedID: "PK1", FeedTitle: `News_[1]\path`, EpisodeID: "ep1", EpisodeTitle: "Episode*(测试)!", EpisodeURL: "https://example.com/watch?v=1", At: time.Date(2026, 10, 1, 21, 0, 0, 0, time.FixedZone("CST", 8*3600)), Duration: time.Second, Size: 6495692}
 			if failure {
 				event.Err = errors.New("HTTP 429: unavailable_video")
 			}

@@ -135,9 +135,22 @@ func episodeMessage(r EpisodeResult) string {
 			message += field("原始错误", errorExcerpt(original), 1000)
 		}
 	} else {
-		message += field("文件大小", fmt.Sprintf("%d bytes", r.Size), 32)
+		message += field("文件大小", formatFileSize(r.Size), 32)
 	}
 	return message
+}
+
+func formatFileSize(size int64) string {
+	if size < 1024 {
+		return fmt.Sprintf("%d B", size)
+	}
+	units := [...]string{"B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"}
+	value, unit := float64(size), 0
+	for value >= 1024 && unit < len(units)-1 {
+		value /= 1024
+		unit++
+	}
+	return fmt.Sprintf("%.2f %s", value, units[unit])
 }
 
 // Bound each dynamic field before escaping, preserving valid UTF-8. Limits
